@@ -199,7 +199,7 @@ button:hover { transform: translateY(-1px); }
 }
 #timeline-space {
   position: relative;
-  min-width: 900px;
+  min-width: min(900px, 100%);
   height: 520px;
   border-radius: 12px;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 14px 28px rgba(15,23,42,0.12);
@@ -447,5 +447,70 @@ button:hover { transform: translateY(-1px); }
     right: 8px;
     width: 92vw;
     max-height: calc(100vh - 120px);
+  }
+}
+
+@media (max-width: 800px) {
+  body { padding-bottom: 80px; }
+  .topbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .top-actions {
+    width: 100%;
+    gap: 12px;
+  }
+  .action-group {
+    flex: 1;
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .action-group button,
+  .action-group select,
+  .action-group input {
+    flex: 1;
+  }
+  main {
+    padding: 12px;
+    gap: 12px;
+  }
+  .sidebar {
+    position: relative;
+    z-index: 10;
+  }
+  .listing-panel {
+    position: static;
+    width: 100%;
+    max-height: none;
+    flex-direction: column;
+  }
+  .timeline-scroll {
+    min-height: 320px;
+  }
+  #timeline-space {
+    min-width: 100%;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .section-row { flex-direction: column; }
+  .section-row button { width: 100%; }
+}
+
+@media (max-width: 540px) {
+  .topbar {
+    position: static;
+    border-radius: 0 0 12px 12px;
+  }
+  .title { font-size: 20px; }
+  .subtitle { font-size: 13px; }
+  .action-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .listing-panel .card,
+  .sidebar .card,
+  .main-content .timeline-wrapper {
+    border-radius: 12px;
   }
 }
