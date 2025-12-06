@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Frise chronologique paramétrable</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=DM+Sans:wght@400;500;600&family=Playfair+Display:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="title-block">
+      <div class="title">Frise chronologique paramétrable</div>
+      <p class="subtitle">Configurez la grille, ajoutez des événements et périodes, déplacez-les librement, exportez en PDF multi-pages.</p>
+    </div>
+    <div class="top-actions">
+      <div class="action-group">
+        <button class="ghost" id="toggle-lists">Masquer listes</button>
+        <button class="ghost" id="open-settings">Paramètres de la frise</button>
+        <button class="ghost" id="save-state">Enregistrer la frise</button>
+        <label class="ghost file-label">
+          Charger une frise
+          <input type="file" id="load-input" accept="application/json">
+        </label>
+      </div>
+      <div class="action-group">
+        <select id="pdf-orientation" class="compact">
+          <option value="landscape">Paysage</option>
+          <option value="portrait">Portrait</option>
+        </select>
+        <input id="export-scale" class="compact" type="number" value="2" min="1" max="4" step="0.5" title="Qualité export (x)">
+        <button id="save-image">Exporter PNG</button>
+        <button id="export-pdf">Exporter PDF</button>
+        <button id="export-html">Exporter HTML</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="modal hidden" id="settings-modal">
+    <div class="modal-backdrop" id="close-settings"></div>
+    <div class="modal-content card">
+      <div class="modal-head">
+        <h3>Paramètres généraux de la frise</h3>
+        <button class="ghost" id="close-settings-btn">Fermer</button>
+      </div>
+      <div class="settings-section">
+        <h4>Plage & échelle</h4>
+        <div class="form-grid">
+          <label>Début
+            <input id="start" data-setting="start" type="number" value="1900" step="1">
+          </label>
+          <label>Fin
+            <input id="end" data-setting="end" type="number" value="2025" step="1">
+          </label>
+          <label>Unités par graduation principale
+            <input data-setting="mainStep" type="number" value="10" step="1" min="0.01">
+          </label>
+          <label>Graduations secondaires par intervalle
+            <input data-setting="secondaryPerMain" type="number" value="4" step="1" min="0">
+          </label>
+          <label>mm entre graduations principales
+            <input data-setting="mmPerMain" type="number" value="15" step="1" min="1">
+          </label>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h4>Dimensions & offsets</h4>
+        <div class="form-grid">
+          <label>Hauteur zone (px)
+            <input data-setting="timelineHeight" type="number" value="520" step="10" min="200">
+          </label>
+          <label>Hauteur graduations principales (px)
+            <input data-setting="mainTickHeight" type="number" value="20" step="1" min="2">
+          </label>
+          <label>Hauteur graduations secondaires (px)
+            <input data-setting="secondaryTickHeight" type="number" value="12" step="1" min="2">
+          </label>
+          <label>Distance dates (px)
+            <input data-setting="labelOffset" type="number" value="6" step="1">
+          </label>
+          <label>Décalage vertical par défaut événements
+            <input data-setting="eventBaseOffset" type="number" value="-120" step="5">
+          </label>
+          <label>Décalage vertical par défaut périodes
+            <input data-setting="periodBaseOffset" type="number" value="60" step="5">
+          </label>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h4>Couleurs</h4>
+        <div class="form-grid">
+          <label>Couleur fond frise
+            <input data-setting="backgroundColor" type="color" value="#f7f9fb">
+          </label>
+          <label>Couleur ligne de base
+            <input data-setting="baselineColor" type="color" value="#0f172a">
+          </label>
+          <label>Couleur graduations principales
+            <input data-setting="mainTickColor" type="color" value="#0f172a">
+          </label>
+          <label>Couleur graduations secondaires
+            <input data-setting="secondaryTickColor" type="color" value="#94a3b8">
+          </label>
+          <label>Couleur des labels
+            <input data-setting="labelColor" type="color" value="#0f172a">
+          </label>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h4>Labels principaux</h4>
+        <div class="form-grid">
+          <label>Taille texte graduations (px)
+            <input data-setting="labelSize" type="number" value="12" step="1">
+          </label>
+          <label>Police graduations
+            <select data-setting="labelFont">
+              <option value="Space Grotesk">Space Grotesk</option>
+              <option value="DM Sans">DM Sans</option>
+              <option value="Playfair Display">Playfair Display</option>
+              <option value="Roboto">Roboto</option>
+              <option value="Poppins">Poppins</option>
+              <option value="Montserrat">Montserrat</option>
+              <option value="Lora">Lora</option>
+              <option value="Manrope">Manrope</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h4>Labels secondaires</h4>
+        <div class="form-grid">
+          <label class="checkbox-label" style="grid-column: 1 / -1;">
+            <input data-setting="showSecondaryLabels" type="checkbox">
+            Afficher les graduations secondaires
+          </label>
+          <label>Taille texte (px)
+            <input data-setting="secondaryLabelSize" type="number" value="10" step="1">
+          </label>
+          <label>Couleur texte
+            <input data-setting="secondaryLabelColor" type="color" value="#6b7a90">
+          </label>
+          <label>Distance dates (px)
+            <input data-setting="secondaryLabelOffset" type="number" value="4" step="1">
+          </label>
+          <label>Police graduations secondaires
+            <select data-setting="secondaryLabelFont">
+              <option value="Space Grotesk">Space Grotesk</option>
+              <option value="DM Sans">DM Sans</option>
+              <option value="Playfair Display">Playfair Display</option>
+              <option value="Roboto">Roboto</option>
+              <option value="Poppins">Poppins</option>
+              <option value="Montserrat">Montserrat</option>
+              <option value="Lora">Lora</option>
+              <option value="Manrope">Manrope</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="ghost" id="reset-settings">Réinitialiser</button>
+        <button id="apply-settings">Appliquer</button>
+      </div>
+    </div>
+  </div>
+
+  <main>
+    <aside class="sidebar">
+      <div class="card">
+        <h3>Événements</h3>
+        <form id="event-form" class="form-grid">
+          <label>Titre
+            <input name="title" type="text" placeholder="Ex: Lancement produit" required>
+          </label>
+          <label>Position (valeur)
+            <input name="value" type="number" step="0.1" required>
+          </label>
+          <select name="font">
+            <option value="Space Grotesk">Space Grotesk</option>
+            <option value="DM Sans">DM Sans</option>
+            <option value="Playfair Display">Playfair Display</option>
+            <option value="Roboto">Roboto</option>
+            <option value="Open Sans">Open Sans</option>
+            <option value="Lato">Lato</option>
+            <option value="Montserrat">Montserrat</option>
+            <option value="Oswald">Oswald</option>
+          </select>
+          <label>Taille (px)
+            <input name="fontSize" type="number" value="15" min="8">
+          </label>
+          <label>Largeur (px)
+            <input name="width" type="number" value="120" min="50">
+          </label>
+          <label>Couleur texte
+            <input name="textColor" type="color" value="#0f172a">
+          </label>
+          <label>Couleur fond
+            <input name="backgroundColor" type="color" value="#e0f2fe">
+          </label>
+          <label>Opacité fond
+            <input name="backgroundOpacity" type="range" min="0.05" max="1" step="0.05" value="1">
+          </label>
+          <label>Couleur du lien
+            <input name="connectorColor" type="color" value="#0f172a">
+          </label>
+          <label class="checkbox-label">
+            <input name="showDate" type="checkbox" checked>
+            Afficher la date
+          </label>
+          <label>Image (optionnel)
+            <input name="image" type="file" accept="image/*">
+          </label>
+          <label>Texte complémentaire
+            <input name="detail" type="text" placeholder="Notes / description courte">
+          </label>
+          <div class="section-row" style="grid-column: 1 / -1;">
+            <button type="submit" id="event-submit">Ajouter l'événement</button>
+            <button type="button" class="ghost" id="clear-events">Vider</button>
+          </div>
+        </form>
+        <div class="pill-list" id="event-list"></div>
+      </div>
+
+      <div class="card">
+        <h3>Périodes</h3>
+        <form id="period-form" class="form-grid">
+          <label>Titre
+            <input name="title" type="text" placeholder="Ex: Période industrielle" required>
+          </label>
+          <label>Début (valeur)
+            <input name="start" type="number" step="0.1" required>
+          </label>
+          <label>Fin (valeur)
+            <input name="end" type="number" step="0.1" required>
+          </label>
+          <label>Style
+            <select name="style">
+              <option value="rect">Rectangle coloré</option>
+              <option value="line">Ligne avec bornes</option>
+            </select>
+          </label>
+          <label>Épaisseur (px)
+            <input name="thickness" type="number" value="4" min="1">
+          </label>
+          <label>Hauteur encadré (px)
+            <input name="rectHeight" type="number" value="44" min="12">
+          </label>
+          <label>Alignement vertical du titre
+            <select name="titleAlignment">
+              <option value="middle">Milieu</option>
+              <option value="top">Haut</option>
+              <option value="bottom">Bas</option>
+            </select>
+          </label>
+          <label>Opacité (fond)
+            <input name="fillOpacity" type="range" min="0.05" max="1" step="0.05" value="0.45">
+          </label>
+          <label>Couleur fond / ligne
+            <input name="fillColor" type="color" value="#cffafe">
+          </label>
+          <label>Couleur texte
+            <input name="textColor" type="color" value="#0f172a">
+          </label>
+          <label>Couleur contour
+            <input name="strokeColor" type="color" value="#0ea5e9">
+          </label>
+          <label>Taille texte (px)
+            <input name="fontSize" type="number" value="14" min="8">
+          </label>
+          <label>Police
+            <select name="font">
+              <option value="Space Grotesk">Space Grotesk</option>
+              <option value="DM Sans">DM Sans</option>
+              <option value="Playfair Display">Playfair Display</option>
+              <option value="Roboto">Roboto</option>
+              <option value="Open Sans">Open Sans</option>
+              <option value="Lato">Lato</option>
+              <option value="Montserrat">Montserrat</option>
+              <option value="Oswald">Oswald</option>
+            </select>
+          </label>
+          <label class="checkbox-label">
+            <input name="showDate" type="checkbox" checked>
+            Afficher les dates
+          </label>
+          <div class="section-row" style="grid-column: 1 / -1;">
+            <button type="submit" id="period-submit">Ajouter la période</button>
+            <button type="button" class="ghost" id="clear-periods">Vider</button>
+          </div>
+        </form>
+        <div class="pill-list" id="period-list"></div>
+      </div>
+    </aside>
+
+    <section class="main-content">
+      <div class="timeline-wrapper">
+        <div class="timeline-scroll" id="timeline-scroll">
+          <div id="timeline-space"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <aside class="listing-panel" id="listing-panel">
+    <div class="card">
+      <div class="panel-head">
+        <h3>Événements créés</h3>
+      </div>
+      <div class="pill-list" id="event-list"></div>
+    </div>
+    <div class="card">
+      <div class="panel-head">
+        <h3>Périodes créées</h3>
+      </div>
+      <div class="pill-list" id="period-list"></div>
+    </div>
+  </aside>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha512-BNa5z7Bx/OMIZ6Tn6PvxI6Bfq5lHppZArYrusS4x+h0/pk3jfbQfVIAtF+wNCz7L+G2kZZgwyU0vbzUKGwEuqA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha512-/v2x97hUTyVYH3YLZQ4Z5pYcbZHoqT0GyPMYt1s8HxjE6oxuKKC1Sj8hYfGLwRoTSesQbnm7Cdm0gxDW9VPa6w==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script>
+    const pxPerMm = 96 / 25.4;
+    const A4 = {
+      portrait: { w: 210, h: 297 },
+      landscape: { w: 297, h: 210 }
+    };
+
+    const state = {
+      start: 1900,
+      end: 2025,
+      mainStep: 10,
+      secondaryPerMain: 4,
+      mmPerMain: 15,
+      mainTickHeight: 20,
+      secondaryTickHeight: 12,
+      backgroundColor: '#f7f9fb',
+      baselineColor: '#0f172a',
+      mainTickColor: '#0f172a',
+      secondaryTickColor: '#94a3b8',
+      labelColor: '#0f172a',
+      labelSize: 12,
+      labelFont: 'Space Grotesk',
+      timelineHeight: 520,
+      padding: 60,
+      eventBaseOffset: -120,
+      periodBaseOffset: 60,
+      events: [],
+      periods: [],
+      exportScale: 2,
+      orientation: 'landscape'
+    };
+
+    const defaultState = JSON.parse(JSON.stringify(state));
+    let editingEventId = null;
+    let editingPeriodId = null;
+
+    const elTimeline = document.getElementById('timeline-space');
+    const elEventList = document.getElementById('event-list');
+    const elPeriodList = document.getElementById('period-list');
+    const elSettingsModal = document.getElementById('settings-modal');
+    const elTimelineScroll = document.getElementById('timeline-scroll');
+
+    elTimelineScroll.style.height = Math.max(320, Number(state.timelineHeight) + 160) + 'px';
+
+    function toggleModal(show) {
+      elSettingsModal.classList.toggle('hidden', !show);
+    }
+
+    document.getElementById('open-settings').addEventListener('click', () => toggleModal(true));
+    document.getElementById('close-settings').addEventListener('click', () => toggleModal(false));
+    document.getElementById('close-settings-btn').addEventListener('click', () => toggleModal(false));
+    document.getElementById('apply-settings').addEventListener('click', () => {
+      toggleModal(false);
+      renderTimeline();
+    });
+
+    document.querySelectorAll('[data-setting]').forEach(input => {
+      input.addEventListener('input', () => {
+        const key = input.dataset.setting;
+        let val = input.value;
+        if (input.type === 'number') val = parseFloat(val);
+        state[key] = val;
+        if (['timelineHeight'].includes(key)) {
+          elTimelineScroll.style.height = Math.max(320, Number(state.timelineHeight) + 160) + 'px';
+        }
+        renderTimeline();
+      });
+    });
+
+    document.getElementById('pdf-orientation').addEventListener('change', (e) => {
+      state.orientation = e.target.value;
+      renderTimeline();
+    });
+    document.getElementById('export-scale').addEventListener('input', (e) => {
+      state.exportScale = Math.max(1, parseFloat(e.target.value) || 2);
+    });
+
+    document.getElementById('reset-settings').addEventListener('click', () => {
+      Object.keys(defaultState).forEach(key => {
+        if (key === 'events' || key === 'periods') return;
+        state[key] = defaultState[key];
+        const input = document.querySelector(`[data-setting="${key}"]`);
+        if (input) input.value = defaultState[key];
+      });
+      renderTimeline();
+    });
+
+    document.getElementById('clear-events').addEventListener('click', () => {
+      state.events = [];
+      editingEventId = null;
+      document.getElementById('event-submit').textContent = "Ajouter l'événement";
+      renderTimeline();
+    });
+    document.getElementById('clear-periods').addEventListener('click', () => {
+      state.periods = [];
+      editingPeriodId = null;
+      document.getElementById('period-submit').textContent = "Ajouter la période";
+      renderTimeline();
+    });
+
+    function loadImage(file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    const eventForm = document.getElementById('event-form');
+    eventForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const data = new FormData(e.target);
+      const imageFile = data.get('image');
+      const imgData = imageFile && imageFile.size ? await loadImage(imageFile) : null;
+      const target = editingEventId ? state.events.find(ev => ev.id === editingEventId) : null;
+      const payload = {
+        title: data.get('title') || 'Événement',
+        value: parseFloat(data.get('value')),
+        font: data.get('font'),
+        fontSize: parseFloat(data.get('fontSize')) || 14,
+        width: parseFloat(data.get('width')) || 120,
+        textColor: data.get('textColor'),
+        backgroundColor: data.get('backgroundColor'),
+        connectorColor: data.get('connectorColor'),
+        showDate: data.get('showDate') === 'on',
+        detail: data.get('detail') || '',
+        image: imgData || target?.image || null,
+        offsetX: target?.offsetX || 0,
+        offsetY: target?.offsetY || 0,
+        visible: target?.visible !== false
+      };
+
+      if (editingEventId) {
+        if (target) {
+          Object.assign(target, payload);
+        }
+        editingEventId = null;
+        document.getElementById('event-submit').textContent = "Ajouter l'événement";
+      } else {
+        state.events.push({ id: crypto.randomUUID(), ...payload });
+      }
+      e.target.reset();
+      renderTimeline();
+    });
+
+    const periodForm = document.getElementById('period-form');
+    periodForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const data = new FormData(e.target);
+      const startVal = parseFloat(data.get('start'));
+      const endVal = parseFloat(data.get('end'));
+      const target = editingPeriodId ? state.periods.find(pe => pe.id === editingPeriodId) : null;
+      const payload = {
+        title: data.get('title') || 'Période',
+        start: Math.min(startVal, endVal),
+        end: Math.max(startVal, endVal),
+        style: data.get('style'),
+        fillColor: data.get('fillColor'),
+        fillOpacity: parseFloat(data.get('fillOpacity')) || 0.45,
+        textColor: data.get('textColor'),
+        strokeColor: data.get('strokeColor'),
+        font: data.get('font'),
+        fontSize: parseFloat(data.get('fontSize')) || 14,
+        offsetX: target?.offsetX || 0,
+        offsetY: target?.offsetY || 0,
+        visible: target?.visible !== false
+      };
+
+      if (editingPeriodId) {
+        if (target) {
+          Object.assign(target, payload);
+        }
+        editingPeriodId = null;
+        document.getElementById('period-submit').textContent = "Ajouter la période";
+      } else {
+        state.periods.push({ id: crypto.randomUUID(), ...payload });
+      }
+      e.target.reset();
+      renderTimeline();
+    });
+
+    function valueToX(val) {
+      const span = Math.max(state.end - state.start, 1e-6);
+      const pxPerMain = state.mmPerMain * pxPerMm;
+      return state.padding + ((val - state.start) / state.mainStep) * pxPerMain;
+    }
+
+    function timelineWidth() {
+      const span = Math.max(state.end - state.start, 1e-6);
+      const pxPerMain = state.mmPerMain * pxPerMm;
+      return state.padding * 2 + (span / state.mainStep) * pxPerMain;
+    }
+
+    function hexToRgba(hex, alpha) {
+      const h = hex.replace('#', '');
+      const bigint = parseInt(h, 16);
+      const r = (bigint >> 16) & 255;
+      const g = (bigint >> 8) & 255;
+      const b = bigint & 255;
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    function renderGuides() {
+      const guideLayer = document.createElement('div');
+      guideLayer.className = 'guide-layer';
+      const size = A4[state.orientation];
+      const pageW = size.w * pxPerMm;
+      const pageH = size.h * pxPerMm;
+      for (let x = pageW; x < timelineWidth(); x += pageW) {
+        const line = document.createElement('div');
+        line.className = 'guide guide-vert';
+        line.style.left = `${x}px`;
+        guideLayer.appendChild(line);
+      }
+      for (let y = pageH; y < state.timelineHeight; y += pageH) {
+        const line = document.createElement('div');
+        line.className = 'guide guide-horiz';
+        line.style.top = `${y}px`;
+        guideLayer.appendChild(line);
+      }
+      elTimeline.appendChild(guideLayer);
+    }
+
+    function renderAxis() {
+      const baseY = Number(state.timelineHeight) / 2;
+      const axis = document.createElement('div');
+      axis.className = 'baseline';
+      axis.style.top = `${baseY}px`;
+      axis.style.background = state.baselineColor;
+      elTimeline.appendChild(axis);
+
+      for (let v = state.start; v <= state.end + 1e-6; v += state.mainStep) {
+        const x = valueToX(v);
+        const tick = document.createElement('div');
+        tick.className = 'tick main';
+        tick.style.left = `${x}px`;
+        tick.style.height = `${state.mainTickHeight}px`;
+        tick.style.top = `${baseY - state.mainTickHeight}px`;
+        tick.style.background = state.mainTickColor;
+        elTimeline.appendChild(tick);
+
+        if (state.secondaryPerMain > 0 && v + state.mainStep <= state.end + 1e-6) {
+          for (let i = 1; i < state.secondaryPerMain; i++) {
+            const ratio = i / state.secondaryPerMain;
+            const xv = valueToX(v + ratio * state.mainStep);
+            const sTick = document.createElement('div');
+            sTick.className = 'tick secondary';
+            sTick.style.left = `${xv}px`;
+            sTick.style.height = `${state.secondaryTickHeight}px`;
+            sTick.style.top = `${baseY - state.secondaryTickHeight}px`;
+            sTick.style.background = state.secondaryTickColor;
+            elTimeline.appendChild(sTick);
+          }
+        }
+
+        const lbl = document.createElement('div');
+        lbl.className = 'tick-label';
+        lbl.style.top = `${baseY + 6 + state.mainTickHeight}px`;
+        lbl.style.color = state.labelColor;
+        lbl.style.fontSize = `${state.labelSize}px`;
+        lbl.style.fontFamily = state.labelFont;
+        lbl.textContent = v;
+        lbl.style.left = `${x}px`;
+        elTimeline.appendChild(lbl);
+      }
+    }
+
+    function renderEvents() {
+      const baseY = Number(state.timelineHeight) / 2 + Number(state.eventBaseOffset);
+      const lines = [];
+      state.events.forEach(evt => {
+        if (evt.visible === false) return;
+        const card = document.createElement('div');
+        card.className = 'event draggable';
+        card.dataset.id = evt.id;
+        card.dataset.type = 'event';
+        card.style.background = evt.backgroundColor || '#fff';
+        card.style.fontFamily = evt.font;
+        card.style.color = evt.textColor;
+        card.style.width = `${evt.width || 120}px`;
+
+        const title = document.createElement('div');
+        title.className = 'label';
+        title.textContent = evt.title;
+        title.style.fontSize = `${evt.fontSize * 1.15}px`;
+        card.appendChild(title);
+
+        if (evt.showDate) {
+          const date = document.createElement('div');
+          date.className = 'date';
+          date.textContent = evt.value;
+          card.appendChild(date);
+        }
+
+        if (evt.detail) {
+          const detail = document.createElement('div');
+          detail.className = 'date';
+          detail.style.marginTop = '4px';
+          detail.textContent = evt.detail;
+          detail.style.fontSize = `${evt.fontSize * 0.9}px`;
+          card.appendChild(detail);
+        }
+
+        if (evt.image) {
+          const img = document.createElement('img');
+          img.src = evt.image;
+          img.alt = evt.title;
+          card.appendChild(img);
+        }
+
+        elTimeline.appendChild(card);
+
+        const centerX = valueToX(evt.value) + (evt.offsetX || 0);
+        const topY = baseY + (evt.offsetY || 0);
+        card.style.left = `${centerX - card.offsetWidth / 2}px`;
+        card.style.top = `${topY}px`;
+
+        lines.push({
+          x1: centerX,
+          y1: topY + card.offsetHeight / 2,
+          x2: valueToX(evt.value),
+          y2: Number(state.timelineHeight) / 2,
+          color: evt.connectorColor || '#0f172a'
+        });
+      });
+      return lines;
+    }
+
+    function renderPeriods() {
+      const baseY = Number(state.timelineHeight) / 2 + Number(state.periodBaseOffset);
+      state.periods.forEach(per => {
+        if (per.visible === false) return;
+        const wrap = document.createElement('div');
+        wrap.className = `period draggable period-${per.style}`;
+        wrap.dataset.id = per.id;
+        wrap.dataset.type = 'period';
+        const startX = valueToX(per.start);
+        const endX = valueToX(per.end);
+        const width = Math.max(12, endX - startX);
+        const x = startX + (per.offsetX || 0);
+        const y = baseY + (per.offsetY || 0);
+        wrap.style.left = `${x}px`;
+        wrap.style.top = `${y}px`;
+        wrap.style.width = `${width}px`;
+
+        if (per.style === 'rect') {
+          wrap.style.background = hexToRgba(per.fillColor, per.fillOpacity ?? 0.45);
+          wrap.style.border = `2px solid ${hexToRgba(per.strokeColor, Math.min(1, (per.fillOpacity ?? 0.45) + 0.1))}`;
+          const label = document.createElement('div');
+          label.className = 'period-label';
+          label.textContent = `${per.title} (${per.start} – ${per.end})`;
+          label.style.color = per.textColor;
+          label.style.fontFamily = per.font;
+          label.style.fontSize = `${per.fontSize}px`;
+          label.style.textAlign = 'center';
+          wrap.appendChild(label);
+        } else {
+          wrap.style.height = '32px';
+          const line = document.createElement('div');
+          line.className = 'line';
+          line.style.background = per.strokeColor;
+          line.style.opacity = per.fillOpacity ?? 0.45;
+          wrap.appendChild(line);
+
+          const capStart = document.createElement('div');
+          capStart.className = 'cap start';
+          capStart.textContent = '|';
+          capStart.style.color = per.strokeColor;
+          capStart.style.opacity = per.fillOpacity ?? 0.45;
+          wrap.appendChild(capStart);
+
+          const capEnd = document.createElement('div');
+          capEnd.className = 'cap end';
+          capEnd.textContent = '|';
+          capEnd.style.color = per.strokeColor;
+          capEnd.style.opacity = per.fillOpacity ?? 0.45;
+          wrap.appendChild(capEnd);
+
+          const label = document.createElement('div');
+          label.className = 'period-label';
+          label.textContent = `${per.title} (${per.start} – ${per.end})`;
+          label.style.color = per.textColor;
+          label.style.fontFamily = per.font;
+          label.style.fontSize = `${per.fontSize}px`;
+          label.style.textAlign = 'center';
+          wrap.appendChild(label);
+        }
+
+        elTimeline.appendChild(wrap);
+      });
+    }
+
+    function renderConnectors(lines) {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', timelineWidth());
+      svg.setAttribute('height', state.timelineHeight);
+      svg.classList.add('connector-layer');
+      lines.forEach(line => {
+        const el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        el.setAttribute('x1', line.x1);
+        el.setAttribute('y1', line.y1);
+        el.setAttribute('x2', line.x2);
+        el.setAttribute('y2', line.y2);
+        svg.appendChild(el);
+      });
+      elTimeline.appendChild(svg);
+    }
+
+    function attachDrag() {
+      const items = elTimeline.querySelectorAll('.draggable');
+      items.forEach(el => {
+        el.onpointerdown = (ev) => {
+          ev.preventDefault();
+          const id = el.dataset.id;
+          const type = el.dataset.type;
+          const startX = ev.clientX;
+          const startY = ev.clientY;
+          const rect = el.getBoundingClientRect();
+          const timelineRect = elTimeline.getBoundingClientRect();
+          const initialLeft = rect.left - timelineRect.left;
+          const initialTop = rect.top - timelineRect.top;
+          const width = rect.width;
+
+          const onMove = (eMove) => {
+            const dx = eMove.clientX - startX;
+            const dy = eMove.clientY - startY;
+            if (type === 'period') {
+              el.style.top = `${initialTop + dy}px`;
+            } else {
+              el.style.left = `${initialLeft + dx}px`;
+              el.style.top = `${initialTop + dy}px`;
+            }
+          };
+
+          const onUp = (eUp) => {
+            const dx = eUp.clientX - startX;
+            const dy = eUp.clientY - startY;
+            const target = type === 'event'
+              ? state.events.find(ev => ev.id === id)
+              : state.periods.find(pe => pe.id === id);
+            if (target) {
+              if (type === 'event') {
+                const baseX = valueToX(target.value);
+                const baseY = Number(state.timelineHeight) / 2 + Number(state.eventBaseOffset);
+                target.offsetX = (initialLeft + dx + width / 2) - baseX;
+                target.offsetY = (initialTop + dy) - baseY;
+              } else {
+                const baseY = Number(state.timelineHeight) / 2 + Number(state.periodBaseOffset);
+                target.offsetX = 0;
+                target.offsetY = (initialTop + dy) - baseY;
+              }
+            }
+            document.removeEventListener('pointermove', onMove);
+            document.removeEventListener('pointerup', onUp);
+            renderTimeline();
+          };
+
+          document.addEventListener('pointermove', onMove);
+          document.addEventListener('pointerup', onUp);
+        };
+      });
+    }
+
+    function renderList(container, items, type) {
+      container.innerHTML = '';
+      items.forEach(item => {
+        const pill = document.createElement('div');
+        pill.className = 'pill';
+        if (item.visible === false) pill.classList.add('pill-muted');
+        const label = document.createElement('span');
+        label.textContent = type === 'event' ? `${item.title} (${item.value})` : `${item.title} (${item.start}-${item.end})`;
+        pill.appendChild(label);
+
+        const toggle = document.createElement('button');
+        toggle.textContent = item.visible === false ? 'Afficher' : 'Masquer';
+        toggle.title = 'Afficher / masquer';
+        toggle.addEventListener('click', () => {
+          item.visible = !item.visible;
+          renderTimeline();
+        });
+        pill.appendChild(toggle);
+
+        const edit = document.createElement('button');
+        edit.textContent = 'Éditer';
+        edit.title = 'Modifier';
+        edit.addEventListener('click', () => {
+          if (type === 'event') {
+            editingEventId = item.id;
+            document.getElementById('event-submit').textContent = 'Mettre à jour';
+            eventForm.title.value = item.title;
+            eventForm.value.value = item.value;
+            eventForm.font.value = item.font;
+            eventForm.fontSize.value = item.fontSize;
+            eventForm.textColor.value = item.textColor;
+            eventForm.backgroundColor.value = item.backgroundColor;
+            eventForm.detail.value = item.detail || '';
+          } else {
+            editingPeriodId = item.id;
+            document.getElementById('period-submit').textContent = 'Mettre à jour';
+            periodForm.title.value = item.title;
+            periodForm.start.value = item.start;
+            periodForm.end.value = item.end;
+            periodForm.style.value = item.style;
+            periodForm.fillOpacity.value = item.fillOpacity ?? 0.45;
+            periodForm.fillColor.value = item.fillColor;
+            periodForm.textColor.value = item.textColor;
+            periodForm.strokeColor.value = item.strokeColor;
+            periodForm.fontSize.value = item.fontSize;
+            periodForm.font.value = item.font;
+          }
+        });
+        pill.appendChild(edit);
+
+        const del = document.createElement('button');
+        del.textContent = '×';
+        del.title = 'Supprimer';
+        del.addEventListener('click', () => {
+          if (type === 'event') {
+            state.events = state.events.filter(ev => ev.id !== item.id);
+            if (editingEventId === item.id) {
+              editingEventId = null;
+              document.getElementById('event-submit').textContent = "Ajouter l'événement";
+              eventForm.reset();
+            }
+          } else {
+            state.periods = state.periods.filter(pe => pe.id !== item.id);
+            if (editingPeriodId === item.id) {
+              editingPeriodId = null;
+              document.getElementById('period-submit').textContent = "Ajouter la période";
+              periodForm.reset();
+            }
+          }
+          renderTimeline();
+        });
+        pill.appendChild(del);
+
+        container.appendChild(pill);
+      });
+    }
+
+    function renderTimeline() {
+      if (state.end <= state.start) state.end = state.start + 1;
+      elTimeline.innerHTML = '';
+      elTimeline.style.background = state.backgroundColor;
+      elTimeline.style.height = `${state.timelineHeight}px`;
+      elTimeline.style.width = `${timelineWidth()}px`;
+      renderGuides();
+      renderAxis();
+      renderPeriods();
+      const lines = renderEvents();
+      renderConnectors(lines);
+      attachDrag();
+      renderList(elEventList, state.events, 'event');
+      renderList(elPeriodList, state.periods, 'period');
+    }
+
+    async function exportCanvas() {
+      const scale = state.exportScale;
+      const canvas = await html2canvas(elTimeline, {
+        scale,
+        backgroundColor: null,
+        useCORS: true,
+        logging: false
+      });
+      return canvas;
+    }
+
+    document.getElementById('save-image').addEventListener('click', async () => {
+      const canvas = await exportCanvas();
+      const link = document.createElement('a');
+      link.download = 'frise.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    });
+
+    document.getElementById('export-pdf').addEventListener('click', async () => {
+      const canvas = await exportCanvas();
+      const imgWidthMm = canvas.width / pxPerMm;
+      const imgHeightMm = canvas.height / pxPerMm;
+
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({ orientation: state.orientation, unit: 'mm', format: 'a4' });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const pageWidthPx = pageWidth * pxPerMm;
+      const pageHeightPx = pageHeight * pxPerMm;
+
+      if (imgWidthMm <= pageWidth && imgHeightMm <= pageHeight) {
+        const imgData = canvas.toDataURL('image/png');
+        pdf.addImage(imgData, 'PNG', 0, 0, imgWidthMm, imgHeightMm);
+      } else {
+        let first = true;
+        for (let y = 0; y < canvas.height; y += pageHeightPx) {
+          for (let x = 0; x < canvas.width; x += pageWidthPx) {
+            const tileWidth = Math.min(pageWidthPx, canvas.width - x);
+            const tileHeight = Math.min(pageHeightPx, canvas.height - y);
+            const tileCanvas = document.createElement('canvas');
+            tileCanvas.width = tileWidth;
+            tileCanvas.height = tileHeight;
+            const ctx = tileCanvas.getContext('2d');
+            ctx.drawImage(canvas, x, y, tileWidth, tileHeight, 0, 0, tileWidth, tileHeight);
+            const tileImg = tileCanvas.toDataURL('image/png');
+            const mmW = tileWidth / pxPerMm;
+            const mmH = tileHeight / pxPerMm;
+            if (!first) pdf.addPage();
+            pdf.addImage(tileImg, 'PNG', 0, 0, mmW, mmH);
+            first = false;
+          }
+        }
+      }
+      pdf.save('frise.pdf');
+    });
+
+    document.getElementById('save-state').addEventListener('click', () => {
+      const payload = JSON.stringify(state, null, 2);
+      const blob = new Blob([payload], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'frise.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('load-input').addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result);
+          Object.assign(state, defaultState, data);
+          state.events = (data.events || []).map(ev => ({ visible: true, offsetX: 0, offsetY: 0, ...ev }));
+          state.periods = (data.periods || []).map(pe => ({ visible: true, offsetX: 0, offsetY: 0, ...pe }));
+          document.querySelectorAll('[data-setting]').forEach(input => {
+            const key = input.dataset.setting;
+            if (state[key] !== undefined) input.value = state[key];
+          });
+          document.getElementById('pdf-orientation').value = state.orientation;
+          document.getElementById('export-scale').value = state.exportScale;
+          elTimelineScroll.style.height = Math.max(320, Number(state.timelineHeight) + 160) + 'px';
+          renderTimeline();
+        } catch (err) {
+          alert('Impossible de charger ce fichier.');
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    });
+
+    renderTimeline();
+  </script>
+</body>
+</html>
