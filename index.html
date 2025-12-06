@@ -6,7 +6,7 @@
   <title>Frise chronologique paramétrable</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=DM+Sans:wght@400;500;600&family=Playfair+Display:wght@500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=DM+Sans:wght@400;500;600&family=Playfair+Display:wght@500&family=Roboto:wght@400;500&family=Poppins:wght@400;500&family=Montserrat:wght@500;600&family=Lora:wght@500&family=Manrope:wght@500;600&family=Open+Sans:wght@400;600&family=Lato:wght@400;700&family=Oswald:wght@500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -45,6 +45,7 @@
         <h3>Paramètres généraux de la frise</h3>
         <button class="ghost" id="close-settings-btn">Fermer</button>
       </div>
+
       <div class="settings-section">
         <h4>Plage & échelle</h4>
         <div class="form-grid">
@@ -162,6 +163,7 @@
           </label>
         </div>
       </div>
+
       <div class="modal-actions">
         <button class="ghost" id="reset-settings">Réinitialiser</button>
         <button id="apply-settings">Appliquer</button>
@@ -223,7 +225,6 @@
             <button type="button" class="ghost" id="clear-events">Vider</button>
           </div>
         </form>
-        <div class="pill-list" id="event-list"></div>
       </div>
 
       <div class="card">
@@ -293,7 +294,6 @@
             <button type="button" class="ghost" id="clear-periods">Vider</button>
           </div>
         </form>
-        <div class="pill-list" id="period-list"></div>
       </div>
     </aside>
 
@@ -323,7 +323,7 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha512-BNa5z7Bx/OMIZ6Tn6PvxI6Bfq5lHppZArYrusS4x+h0/pk3jfbQfVIAtF+wNCz7L+G2kZZgwyU0vbzUKGwEuqA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha512-/v2x97hUTyVYH3YLZQ4Z5pYcbZHoqT0GyPMYt1s8HxjE6oxuKKC1Sj8hYfGLwRoTSesQbnm7Cdm0gxDW9VPa6w==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script>
+  <script id="app-script">
     const pxPerMm = 96 / 25.4;
     const A4 = {
       portrait: { w: 210, h: 297 },
@@ -344,7 +344,13 @@
       secondaryTickColor: '#94a3b8',
       labelColor: '#0f172a',
       labelSize: 12,
+      labelOffset: 6,
       labelFont: 'Space Grotesk',
+      showSecondaryLabels: false,
+      secondaryLabelSize: 10,
+      secondaryLabelColor: '#6b7a90',
+      secondaryLabelOffset: 4,
+      secondaryLabelFont: 'Space Grotesk',
       timelineHeight: 520,
       padding: 60,
       eventBaseOffset: -120,
@@ -364,12 +370,20 @@
     const elPeriodList = document.getElementById('period-list');
     const elSettingsModal = document.getElementById('settings-modal');
     const elTimelineScroll = document.getElementById('timeline-scroll');
+    const toggleListsBtn = document.getElementById('toggle-lists');
+    let listsVisible = true;
 
     elTimelineScroll.style.height = Math.max(320, Number(state.timelineHeight) + 160) + 'px';
 
     function toggleModal(show) {
       elSettingsModal.classList.toggle('hidden', !show);
     }
+
+    toggleListsBtn?.addEventListener('click', () => {
+      listsVisible = !listsVisible;
+      document.body.classList.toggle('hide-lists', !listsVisible);
+      toggleListsBtn.textContent = listsVisible ? 'Masquer listes' : 'Afficher listes';
+    });
 
     document.getElementById('open-settings').addEventListener('click', () => toggleModal(true));
     document.getElementById('close-settings').addEventListener('click', () => toggleModal(false));
@@ -384,8 +398,9 @@
         const key = input.dataset.setting;
         let val = input.value;
         if (input.type === 'number') val = parseFloat(val);
+        if (input.type === 'checkbox') val = input.checked;
         state[key] = val;
-        if (['timelineHeight'].includes(key)) {
+        if (key === 'timelineHeight') {
           elTimelineScroll.style.height = Math.max(320, Number(state.timelineHeight) + 160) + 'px';
         }
         renderTimeline();
@@ -405,8 +420,12 @@
         if (key === 'events' || key === 'periods') return;
         state[key] = defaultState[key];
         const input = document.querySelector(`[data-setting="${key}"]`);
-        if (input) input.value = defaultState[key];
+        if (input) {
+          if (input.type === 'checkbox') input.checked = defaultState[key];
+          else input.value = defaultState[key];
+        }
       });
+      elTimelineScroll.style.height = Math.max(320, Number(state.timelineHeight) + 160) + 'px';
       renderTimeline();
     });
 
@@ -440,12 +459,13 @@
       const target = editingEventId ? state.events.find(ev => ev.id === editingEventId) : null;
       const payload = {
         title: data.get('title') || 'Événement',
-        value: parseFloat(data.get('value')),
+        value: isNaN(parseFloat(data.get('value'))) ? state.start : parseFloat(data.get('value')),
         font: data.get('font'),
         fontSize: parseFloat(data.get('fontSize')) || 14,
         width: parseFloat(data.get('width')) || 120,
         textColor: data.get('textColor'),
         backgroundColor: data.get('backgroundColor'),
+        backgroundOpacity: parseFloat(data.get('backgroundOpacity')) || 1,
         connectorColor: data.get('connectorColor'),
         showDate: data.get('showDate') === 'on',
         detail: data.get('detail') || '',
@@ -456,9 +476,7 @@
       };
 
       if (editingEventId) {
-        if (target) {
-          Object.assign(target, payload);
-        }
+        if (target) Object.assign(target, payload);
         editingEventId = null;
         document.getElementById('event-submit').textContent = "Ajouter l'événement";
       } else {
@@ -474,27 +492,31 @@
       const data = new FormData(e.target);
       const startVal = parseFloat(data.get('start'));
       const endVal = parseFloat(data.get('end'));
+      const safeStart = isNaN(startVal) ? state.start : startVal;
+      const safeEnd = isNaN(endVal) ? state.end : endVal;
       const target = editingPeriodId ? state.periods.find(pe => pe.id === editingPeriodId) : null;
       const payload = {
         title: data.get('title') || 'Période',
-        start: Math.min(startVal, endVal),
-        end: Math.max(startVal, endVal),
+        start: Math.min(safeStart, safeEnd),
+        end: Math.max(safeStart, safeEnd),
         style: data.get('style'),
+        thickness: parseFloat(data.get('thickness')) || 4,
+        rectHeight: parseFloat(data.get('rectHeight')) || 44,
+        titleAlignment: data.get('titleAlignment'),
         fillColor: data.get('fillColor'),
         fillOpacity: parseFloat(data.get('fillOpacity')) || 0.45,
         textColor: data.get('textColor'),
         strokeColor: data.get('strokeColor'),
         font: data.get('font'),
         fontSize: parseFloat(data.get('fontSize')) || 14,
+        showDate: data.get('showDate') === 'on',
         offsetX: target?.offsetX || 0,
         offsetY: target?.offsetY || 0,
         visible: target?.visible !== false
       };
 
       if (editingPeriodId) {
-        if (target) {
-          Object.assign(target, payload);
-        }
+        if (target) Object.assign(target, payload);
         editingPeriodId = null;
         document.getElementById('period-submit').textContent = "Ajouter la période";
       } else {
@@ -575,12 +597,24 @@
             sTick.style.top = `${baseY - state.secondaryTickHeight}px`;
             sTick.style.background = state.secondaryTickColor;
             elTimeline.appendChild(sTick);
+
+            if (state.showSecondaryLabels) {
+              const sLbl = document.createElement('div');
+              sLbl.className = 'tick-label secondary';
+              sLbl.style.top = `${baseY + state.secondaryLabelOffset}px`;
+              sLbl.style.color = state.secondaryLabelColor;
+              sLbl.style.fontSize = `${state.secondaryLabelSize}px`;
+              sLbl.style.fontFamily = state.secondaryLabelFont || state.labelFont;
+              sLbl.textContent = v + ratio * state.mainStep;
+              sLbl.style.left = `${xv}px`;
+              elTimeline.appendChild(sLbl);
+            }
           }
         }
 
         const lbl = document.createElement('div');
         lbl.className = 'tick-label';
-        lbl.style.top = `${baseY + 6 + state.mainTickHeight}px`;
+        lbl.style.top = `${baseY + state.labelOffset}px`;
         lbl.style.color = state.labelColor;
         lbl.style.fontSize = `${state.labelSize}px`;
         lbl.style.fontFamily = state.labelFont;
@@ -599,7 +633,7 @@
         card.className = 'event draggable';
         card.dataset.id = evt.id;
         card.dataset.type = 'event';
-        card.style.background = evt.backgroundColor || '#fff';
+        card.style.backgroundColor = hexToRgba(evt.backgroundColor || '#fff', evt.backgroundOpacity ?? 1);
         card.style.fontFamily = evt.font;
         card.style.color = evt.textColor;
         card.style.width = `${evt.width || 120}px`;
@@ -610,7 +644,7 @@
         title.style.fontSize = `${evt.fontSize * 1.15}px`;
         card.appendChild(title);
 
-        if (evt.showDate) {
+        if (evt.showDate !== false) {
           const date = document.createElement('div');
           date.className = 'date';
           date.textContent = evt.value;
@@ -640,11 +674,13 @@
         card.style.left = `${centerX - card.offsetWidth / 2}px`;
         card.style.top = `${topY}px`;
 
+        const baselineY = Number(state.timelineHeight) / 2;
+        const yStart = (topY + card.offsetHeight / 2) < baselineY ? (topY + card.offsetHeight) : topY;
         lines.push({
           x1: centerX,
-          y1: topY + card.offsetHeight / 2,
+          y1: yStart,
           x2: valueToX(evt.value),
-          y2: Number(state.timelineHeight) / 2,
+          y2: baselineY,
           color: evt.connectorColor || '#0f172a'
         });
       });
@@ -668,49 +704,82 @@
         wrap.style.top = `${y}px`;
         wrap.style.width = `${width}px`;
 
+        const labelText = per.showDate !== false ? `${per.title} (${per.start} – ${per.end})` : per.title;
+        const thickness = per.thickness ?? 4;
+        const rectHeight = per.rectHeight ?? 44;
+        const align = per.titleAlignment || 'middle';
+
         if (per.style === 'rect') {
           wrap.style.background = hexToRgba(per.fillColor, per.fillOpacity ?? 0.45);
-          wrap.style.border = `2px solid ${hexToRgba(per.strokeColor, Math.min(1, (per.fillOpacity ?? 0.45) + 0.1))}`;
+          wrap.style.border = `${thickness}px solid ${hexToRgba(per.strokeColor, Math.min(1, (per.fillOpacity ?? 0.45) + 0.1))}`;
+          wrap.style.height = `${rectHeight}px`;
+          wrap.style.display = 'flex';
+          wrap.style.flexDirection = 'column';
+          wrap.style.alignItems = 'center';
+          wrap.style.justifyContent = align === 'top' ? 'flex-start' : align === 'bottom' ? 'flex-end' : 'center';
           const label = document.createElement('div');
           label.className = 'period-label';
-          label.textContent = `${per.title} (${per.start} – ${per.end})`;
+          label.textContent = labelText;
           label.style.color = per.textColor;
           label.style.fontFamily = per.font;
           label.style.fontSize = `${per.fontSize}px`;
           label.style.textAlign = 'center';
+          label.style.width = '100%';
           wrap.appendChild(label);
         } else {
-          wrap.style.height = '32px';
+          wrap.style.display = 'flex';
+          wrap.style.flexDirection = 'column';
+          wrap.style.alignItems = 'center';
+          wrap.style.gap = align === 'middle' ? '0' : '6px';
+          wrap.style.overflow = 'visible';
           const line = document.createElement('div');
           line.className = 'line';
           line.style.background = per.strokeColor;
           line.style.opacity = per.fillOpacity ?? 0.45;
-          wrap.appendChild(line);
+          line.style.height = `${thickness}px`;
+          line.style.position = 'relative';
+          line.style.width = '100%';
 
           const capStart = document.createElement('div');
           capStart.className = 'cap start';
           capStart.textContent = '|';
           capStart.style.color = per.strokeColor;
           capStart.style.opacity = per.fillOpacity ?? 0.45;
-          wrap.appendChild(capStart);
+          line.appendChild(capStart);
 
           const capEnd = document.createElement('div');
           capEnd.className = 'cap end';
           capEnd.textContent = '|';
           capEnd.style.color = per.strokeColor;
           capEnd.style.opacity = per.fillOpacity ?? 0.45;
-          wrap.appendChild(capEnd);
+          line.appendChild(capEnd);
 
           const label = document.createElement('div');
           label.className = 'period-label';
-          label.textContent = `${per.title} (${per.start} – ${per.end})`;
+          label.textContent = labelText;
           label.style.color = per.textColor;
           label.style.fontFamily = per.font;
           label.style.fontSize = `${per.fontSize}px`;
           label.style.textAlign = 'center';
-          wrap.appendChild(label);
-        }
 
+          if (align === 'top') {
+            wrap.appendChild(label);
+            wrap.appendChild(line);
+          } else if (align === 'bottom') {
+            wrap.appendChild(line);
+            wrap.appendChild(label);
+          } else {
+            wrap.appendChild(line);
+            const overlay = label.cloneNode(true);
+            overlay.style.position = 'absolute';
+            overlay.style.top = '50%';
+            overlay.style.left = '50%';
+            overlay.style.transform = 'translate(-50%, -50%)';
+            overlay.style.pointerEvents = 'none';
+            wrap.style.padding = `${Math.max(8, per.fontSize)}px 0`;
+            wrap.appendChild(overlay);
+          }
+        }
         elTimeline.appendChild(wrap);
       });
     }
@@ -726,6 +795,7 @@
         el.setAttribute('y1', line.y1);
         el.setAttribute('x2', line.x2);
         el.setAttribute('y2', line.y2);
+        el.style.stroke = line.color || 'rgba(15,23,42,0.45)';
         svg.appendChild(el);
       });
       elTimeline.appendChild(svg);
@@ -818,7 +888,11 @@
             eventForm.fontSize.value = item.fontSize;
             eventForm.textColor.value = item.textColor;
             eventForm.backgroundColor.value = item.backgroundColor;
+            eventForm.backgroundOpacity.value = item.backgroundOpacity ?? 1;
             eventForm.detail.value = item.detail || '';
+            eventForm.width.value = item.width || 120;
+            eventForm.connectorColor.value = item.connectorColor || '#0f172a';
+            eventForm.showDate.checked = item.showDate !== false;
           } else {
             editingPeriodId = item.id;
             document.getElementById('period-submit').textContent = 'Mettre à jour';
@@ -832,6 +906,10 @@
             periodForm.strokeColor.value = item.strokeColor;
             periodForm.fontSize.value = item.fontSize;
             periodForm.font.value = item.font;
+            periodForm.thickness.value = item.thickness ?? 4;
+            periodForm.titleAlignment.value = item.titleAlignment || 'middle';
+            periodForm.showDate.checked = item.showDate !== false;
+            periodForm.rectHeight.value = item.rectHeight || 44;
           }
         });
         pill.appendChild(edit);
@@ -936,6 +1014,17 @@
       pdf.save('frise.pdf');
     });
 
+    document.getElementById('export-html').addEventListener('click', () => {
+      const html = document.documentElement.outerHTML;
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'frise.html';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
     document.getElementById('save-state').addEventListener('click', () => {
       const payload = JSON.stringify(state, null, 2);
       const blob = new Blob([payload], { type: 'application/json' });
@@ -959,7 +1048,9 @@
           state.periods = (data.periods || []).map(pe => ({ visible: true, offsetX: 0, offsetY: 0, ...pe }));
           document.querySelectorAll('[data-setting]').forEach(input => {
             const key = input.dataset.setting;
-            if (state[key] !== undefined) input.value = state[key];
+            if (state[key] === undefined) return;
+            if (input.type === 'checkbox') input.checked = Boolean(state[key]);
+            else input.value = state[key];
           });
           document.getElementById('pdf-orientation').value = state.orientation;
           document.getElementById('export-scale').value = state.exportScale;
