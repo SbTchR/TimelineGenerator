@@ -1016,12 +1016,37 @@
       return canvas;
     }
 
+    function canvasToBlob(canvas, type = 'image/png', quality) {
+      return new Promise(resolve => canvas.toBlob(resolve, type, quality));
+    }
+
+    async function triggerDownload(blob, filename) {
+      if (!blob) return;
+
+      const file = new File([blob], filename, { type: blob.type });
+      if (navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: filename });
+          return;
+        } catch (err) {
+          console.warn('Partage interrompu ou non supporté, utilisation du téléchargement classique', err);
+        }
+      }
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+
     document.getElementById('save-image').addEventListener('click', async () => {
       const canvas = await exportCanvas();
-      const link = document.createElement('a');
-      link.download = 'frise.png';
-      link.href = canvas.toDataURL('image/png');
-      link.click();
+      const blob = await canvasToBlob(canvas, 'image/png');
+      await triggerDownload(blob, 'frise.png');
     });
 
     document.getElementById('export-pdf').addEventListener('click', async () => {
@@ -1059,18 +1084,14 @@
           }
         }
       }
-      pdf.save('frise.pdf');
+      const blob = pdf.output('blob');
+      await triggerDownload(blob, 'frise.pdf');
     });
 
     document.getElementById('export-html').addEventListener('click', () => {
       const html = document.documentElement.outerHTML;
       const blob = new Blob([html], { type: 'text/html' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'frise.html';
-      a.click();
-      URL.revokeObjectURL(url);
+      triggerDownload(blob, 'frise.html');
     });
 
     document.getElementById('save-state').addEventListener('click', () => {
