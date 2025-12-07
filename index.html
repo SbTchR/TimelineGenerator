@@ -1024,7 +1024,17 @@
       if (!blob) return;
 
       const file = new File([blob], filename, { type: blob.type });
-      if (navigator.canShare?.({ files: [file] })) {
+      let canShareFiles = false;
+
+      if (navigator.canShare) {
+        try {
+          canShareFiles = navigator.canShare({ files: [file], title: filename });
+        } catch (err) {
+          console.warn('Partage non supporté pour les fichiers, utilisation du téléchargement classique', err);
+        }
+      }
+
+      if (canShareFiles) {
         try {
           await navigator.share({ files: [file], title: filename });
           return;
