@@ -12,7 +12,7 @@ const state = {
     mmPerMain: 15,
     mainTickHeight: 20,
     secondaryTickHeight: 12,
-    backgroundColor: '#f7f9fb',
+    backgroundColor: 'transparent',
     baselineColor: '#0f172a',
     mainTickColor: '#0f172a',
     secondaryTickColor: '#94a3b8',
@@ -68,17 +68,37 @@ document.getElementById('apply-settings').addEventListener('click', () => {
 });
 
 document.querySelectorAll('[data-setting]').forEach(input => {
-    input.addEventListener('input', () => {
-        const key = input.dataset.setting;
-        let val = input.value;
-        if (input.type === 'number') val = parseFloat(val);
-        if (input.type === 'checkbox') val = input.checked;
-        state[key] = val;
+    input.addEventListener('input', (e) => {
+        const key = e.target.dataset.setting;
+        let val = e.target.value;
+        if (e.target.type === 'number') val = parseFloat(val);
+        if (e.target.type === 'checkbox') val = e.target.checked;
+
+        if (key === 'backgroundColor') {
+            if (!document.getElementById('bg-transparent').checked) {
+                state[key] = val;
+            }
+        } else {
+            state[key] = val;
+        }
+
         if (key === 'timelineHeight') {
             elTimelineScroll.style.height = Math.max(320, Number(state.timelineHeight) + 160) + 'px';
         }
         renderTimeline();
     });
+});
+
+document.getElementById('bg-transparent').addEventListener('change', (e) => {
+    const colorInput = document.querySelector('[data-setting="backgroundColor"]');
+    if (e.target.checked) {
+        state.backgroundColor = 'transparent';
+        colorInput.disabled = true;
+    } else {
+        state.backgroundColor = colorInput.value;
+        colorInput.disabled = false;
+    }
+    renderTimeline();
 });
 
 document.getElementById('pdf-orientation').addEventListener('change', (e) => {
@@ -92,8 +112,16 @@ document.getElementById('reset-settings').addEventListener('click', () => {
         state[key] = defaultState[key];
         const input = document.querySelector(`[data-setting="${key}"]`);
         if (input) {
-            if (input.type === 'checkbox') input.checked = defaultState[key];
-            else input.value = defaultState[key];
+            if (key === 'backgroundColor') {
+                const isTransp = defaultState[key] === 'transparent';
+                document.getElementById('bg-transparent').checked = isTransp;
+                input.value = isTransp ? '#ffffff' : defaultState[key]; // Set a default visible color if transparent
+                input.disabled = isTransp;
+            } else if (input.type === 'checkbox') {
+                input.checked = defaultState[key];
+            } else {
+                input.value = defaultState[key];
+            }
         }
     });
     elTimelineScroll.style.height = Math.max(320, Number(state.timelineHeight) + 160) + 'px';
@@ -613,11 +641,11 @@ function renderList(container, items, type) {
         pill.className = 'pill';
         if (item.visible === false) pill.classList.add('pill-muted');
         const label = document.createElement('span');
-        label.textContent = type === 'event' ? `${item.title} (${item.value})` : `${item.title} (${item.start}-${item.end})`;
+        label.textContent = type === 'event' ? `${item.title} : ${item.value}` : `${item.title} : ${item.start}-${item.end}`;
         pill.appendChild(label);
 
         const toggle = document.createElement('button');
-        toggle.textContent = item.visible === false ? 'Afficher' : 'Masquer';
+        toggle.textContent = item.visible === false ? '⚪' : '⚫';
         toggle.title = 'Afficher / masquer';
         toggle.addEventListener('click', () => {
             item.visible = !item.visible;
@@ -626,7 +654,7 @@ function renderList(container, items, type) {
         pill.appendChild(toggle);
 
         const edit = document.createElement('button');
-        edit.textContent = 'Éditer';
+        edit.textContent = '✏️';
         edit.title = 'Modifier';
         edit.addEventListener('click', () => {
             if (type === 'event') {
@@ -673,14 +701,14 @@ function renderList(container, items, type) {
                 state.events = state.events.filter(ev => ev.id !== item.id);
                 if (editingEventId === item.id) {
                     editingEventId = null;
-                    document.getElementById('event-submit').textContent = "Ajouter l'événement";
+                    document.getElementById('event-submit').textContent = "Ajouter";
                     eventForm.reset();
                 }
             } else {
                 state.periods = state.periods.filter(pe => pe.id !== item.id);
                 if (editingPeriodId === item.id) {
                     editingPeriodId = null;
-                    document.getElementById('period-submit').textContent = "Ajouter la période";
+                    document.getElementById('period-submit').textContent = "Ajouter";
                     periodForm.reset();
                 }
             }
