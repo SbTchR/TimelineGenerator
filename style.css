@@ -589,4 +589,91 @@ button:hover {
     width: 92vw;
     max-height: calc(100vh - 120px);
   }
+<<<<<<< HEAD
 }
+=======
+}
+
+@media (max-width: 860px) {
+  body {
+    background: #f5f6fb;
+  }
+
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+    padding: 14px 16px;
+  }
+
+  .title {
+    font-size: 20px;
+  }
+
+  .subtitle {
+    font-size: 13px;
+  }
+
+  .top-actions {
+    width: 100%;
+    gap: 8px;
+  }
+
+  .action-group {
+    width: 100%;
+    overflow-x: auto;
+    padding: 8px;
+  }
+
+  .action-group button,
+  .action-group select,
+  .action-group input[type="number"] {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  main {
+    grid-template-columns: 1fr;
+    padding: 10px;
+    gap: 12px;
+  }
+
+  .sidebar,
+  .listing-panel {
+    position: static;
+    width: 100%;
+    max-height: none;
+  }
+
+  .listing-panel {
+    order: 3;
+  }
+
+  .card {
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .timeline-wrapper {
+    order: 2;
+  }
+
+  .timeline-scroll {
+    padding: 8px;
+    height: auto;
+    max-height: 70vh;
+  }
+
+  #timeline-space {
+    min-width: 640px;
+    height: max(420px, var(--timeline-mobile-height, 480px));
+  }
+
+  .modal-content {
+    width: 94vw;
+  }
+}
+>>>>>>> 66d0b82582baa694fe7b713a992ce539ce2b2791
