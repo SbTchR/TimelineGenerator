@@ -192,6 +192,10 @@ textarea {
   transition: border 0.15s, box-shadow 0.15s;
 }
 
+input[type="file"] {
+  max-width: 100%;
+}
+
 textarea {
   resize: vertical;
   min-height: 40px;
@@ -319,6 +323,17 @@ button:hover {
   z-index: 4;
 }
 
+.event:hover,
+.period:hover {
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.18);
+}
+
+.event.is-editing,
+.period.is-editing {
+  outline: 3px solid rgba(37, 99, 235, 0.45);
+  outline-offset: 3px;
+}
+
 .event:active {
   cursor: grabbing;
 }
@@ -337,12 +352,12 @@ button:hover {
 }
 
 .event img {
-  width: 100%;
   margin-top: 8px;
   border-radius: 8px;
   object-fit: cover;
-  max-height: 140px;
   display: block;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .period {
@@ -441,6 +456,11 @@ button:hover {
 
 .pill-muted {
   opacity: 0.55;
+}
+
+.pill-active {
+  border-color: rgba(37, 99, 235, 0.6);
+  background: #eaf2ff;
 }
 
 .section-row {

@@ -45,6 +45,8 @@ const elPeriodList = document.getElementById('period-list');
 const elSettingsModal = document.getElementById('settings-modal');
 const elTimelineScroll = document.getElementById('timeline-scroll');
 const toggleListsBtn = document.getElementById('toggle-lists');
+const eventSubmitBtn = document.getElementById('event-submit');
+const periodSubmitBtn = document.getElementById('period-submit');
 let listsVisible = true;
 
 elTimelineScroll.style.height = Math.max(320, Number(state.timelineHeight) + 160) + 'px';
@@ -131,13 +133,13 @@ document.getElementById('reset-settings').addEventListener('click', () => {
 document.getElementById('clear-events').addEventListener('click', () => {
     state.events = [];
     editingEventId = null;
-    document.getElementById('event-submit').textContent = "Ajouter l'événement";
+    eventSubmitBtn.textContent = "Ajouter l'événement";
     renderTimeline();
 });
 document.getElementById('clear-periods').addEventListener('click', () => {
     state.periods = [];
     editingPeriodId = null;
-    document.getElementById('period-submit').textContent = "Ajouter la période";
+    periodSubmitBtn.textContent = "Ajouter la période";
     renderTimeline();
 });
 
@@ -149,6 +151,132 @@ function loadImage(file) {
     });
 }
 
+function toNumber(value, fallback) {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function readEventFormPayload(form, target = {}, imageData = undefined) {
+    const image = imageData === undefined ? target.image || null : imageData || target.image || null;
+    return {
+        title: form.title.value || 'Événement',
+        value: toNumber(form.value.value, target.value ?? state.start),
+        font: form.font.value,
+        fontSize: toNumber(form.fontSize.value, target.fontSize ?? 14),
+        width: toNumber(form.width.value, target.width ?? 120),
+        textColor: form.textColor.value,
+        backgroundColor: form.backgroundColor.value,
+        backgroundOpacity: toNumber(form.backgroundOpacity.value, target.backgroundOpacity ?? 1),
+        connectorColor: form.connectorColor.value,
+        showDate: form.showDate.checked,
+        showTitle: form.showTitle.checked,
+        showDetail: form.showDetail.checked,
+        detail: form.detail.value || '',
+        image,
+        imageWidth: toNumber(form.imageWidth.value, target.imageWidth ?? 120),
+        imageHeight: toNumber(form.imageHeight.value, target.imageHeight ?? 90),
+        offsetX: target.offsetX || 0,
+        offsetY: target.offsetY || 0,
+        visible: target.visible !== false
+    };
+}
+
+function readPeriodFormPayload(form, target = {}, imageData = undefined) {
+    const startVal = toNumber(form.start.value, target.start ?? state.start);
+    const endVal = toNumber(form.end.value, target.end ?? state.end);
+    const image = imageData === undefined ? target.image || null : imageData || target.image || null;
+    return {
+        title: form.title.value || 'Période',
+        start: Math.min(startVal, endVal),
+        end: Math.max(startVal, endVal),
+        style: form.style.value,
+        thickness: toNumber(form.thickness.value, target.thickness ?? 4),
+        rectHeight: toNumber(form.rectHeight.value, target.rectHeight ?? 44),
+        titleAlignment: form.titleAlignment.value,
+        fillColor: form.fillColor.value,
+        fillOpacity: toNumber(form.fillOpacity.value, target.fillOpacity ?? 0.45),
+        textColor: form.textColor.value,
+        strokeColor: form.strokeColor.value,
+        font: form.font.value,
+        fontSize: toNumber(form.fontSize.value, target.fontSize ?? 14),
+        showDate: form.showDate.checked,
+        showTitle: form.showTitle.checked,
+        showDetail: form.showDetail.checked,
+        detail: form.detail.value || '',
+        image,
+        imageWidth: toNumber(form.imageWidth.value, target.imageWidth ?? 120),
+        imageHeight: toNumber(form.imageHeight.value, target.imageHeight ?? 80),
+        offsetX: target.offsetX || 0,
+        offsetY: target.offsetY || 0,
+        visible: target.visible !== false
+    };
+}
+
+function fillEventForm(item) {
+    eventForm.title.value = item.title;
+    eventForm.value.value = item.value;
+    eventForm.font.value = item.font;
+    eventForm.fontSize.value = item.fontSize;
+    eventForm.textColor.value = item.textColor;
+    eventForm.backgroundColor.value = item.backgroundColor;
+    eventForm.backgroundOpacity.value = item.backgroundOpacity ?? 1;
+    eventForm.detail.value = item.detail || '';
+    eventForm.width.value = item.width || 120;
+    eventForm.connectorColor.value = item.connectorColor || '#0f172a';
+    eventForm.showDate.checked = item.showDate !== false;
+    eventForm.showTitle.checked = item.showTitle !== false;
+    eventForm.showDetail.checked = item.showDetail !== false;
+    eventForm.imageWidth.value = item.imageWidth || 120;
+    eventForm.imageHeight.value = item.imageHeight || 90;
+    eventForm.image.value = '';
+}
+
+function fillPeriodForm(item) {
+    periodForm.title.value = item.title;
+    periodForm.start.value = item.start;
+    periodForm.end.value = item.end;
+    periodForm.style.value = item.style;
+    periodForm.fillOpacity.value = item.fillOpacity ?? 0.45;
+    periodForm.fillColor.value = item.fillColor;
+    periodForm.textColor.value = item.textColor;
+    periodForm.strokeColor.value = item.strokeColor;
+    periodForm.fontSize.value = item.fontSize;
+    periodForm.font.value = item.font;
+    periodForm.thickness.value = item.thickness ?? 4;
+    periodForm.titleAlignment.value = item.titleAlignment || 'middle';
+    periodForm.showDate.checked = item.showDate !== false;
+    periodForm.showTitle.checked = item.showTitle !== false;
+    periodForm.showDetail.checked = item.showDetail !== false;
+    periodForm.rectHeight.value = item.rectHeight || 44;
+    periodForm.detail.value = item.detail || '';
+    periodForm.imageWidth.value = item.imageWidth || 120;
+    periodForm.imageHeight.value = item.imageHeight || 80;
+    periodForm.image.value = '';
+}
+
+function startEditing(type, id, scrollToForm = true) {
+    if (type === 'event') {
+        const item = state.events.find(ev => ev.id === id);
+        if (!item) return;
+        editingEventId = id;
+        editingPeriodId = null;
+        eventSubmitBtn.textContent = 'Mettre à jour';
+        periodSubmitBtn.textContent = 'Ajouter';
+        fillEventForm(item);
+        if (scrollToForm) eventForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+        const item = state.periods.find(pe => pe.id === id);
+        if (!item) return;
+        editingPeriodId = id;
+        editingEventId = null;
+        periodSubmitBtn.textContent = 'Mettre à jour';
+        eventSubmitBtn.textContent = 'Ajouter';
+        fillPeriodForm(item);
+        if (scrollToForm) periodForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    renderTimeline();
+}
+
 const eventForm = document.getElementById('event-form');
 eventForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -156,28 +284,12 @@ eventForm.addEventListener('submit', async (e) => {
     const imageFile = data.get('image');
     const imgData = imageFile && imageFile.size ? await loadImage(imageFile) : null;
     const target = editingEventId ? state.events.find(ev => ev.id === editingEventId) : null;
-    const payload = {
-        title: data.get('title') || 'Événement',
-        value: isNaN(parseFloat(data.get('value'))) ? state.start : parseFloat(data.get('value')),
-        font: data.get('font'),
-        fontSize: parseFloat(data.get('fontSize')) || 14,
-        width: parseFloat(data.get('width')) || 120,
-        textColor: data.get('textColor'),
-        backgroundColor: data.get('backgroundColor'),
-        backgroundOpacity: parseFloat(data.get('backgroundOpacity')) || 1,
-        connectorColor: data.get('connectorColor'),
-        showDate: data.get('showDate') === 'on',
-        detail: data.get('detail') || '',
-        image: imgData || target?.image || null,
-        offsetX: target?.offsetX || 0,
-        offsetY: target?.offsetY || 0,
-        visible: target?.visible !== false
-    };
+    const payload = readEventFormPayload(e.target, target || {}, imgData);
 
     if (editingEventId) {
         if (target) Object.assign(target, payload);
         editingEventId = null;
-        document.getElementById('event-submit').textContent = "Ajouter l'événement";
+        eventSubmitBtn.textContent = "Ajouter l'événement";
     } else {
         state.events.push({ id: crypto.randomUUID(), ...payload });
     }
@@ -191,41 +303,51 @@ periodForm.addEventListener('submit', async (e) => {
     const data = new FormData(e.target);
     const imageFile = data.get('image');
     const imgData = imageFile && imageFile.size ? await loadImage(imageFile) : null;
-    const startVal = parseFloat(data.get('start'));
-    const endVal = parseFloat(data.get('end'));
-    const safeStart = isNaN(startVal) ? state.start : startVal;
-    const safeEnd = isNaN(endVal) ? state.end : endVal;
     const target = editingPeriodId ? state.periods.find(pe => pe.id === editingPeriodId) : null;
-    const payload = {
-        title: data.get('title') || 'Période',
-        start: Math.min(safeStart, safeEnd),
-        end: Math.max(safeStart, safeEnd),
-        style: data.get('style'),
-        thickness: parseFloat(data.get('thickness')) || 4,
-        rectHeight: parseFloat(data.get('rectHeight')) || 44,
-        titleAlignment: data.get('titleAlignment'),
-        fillColor: data.get('fillColor'),
-        fillOpacity: parseFloat(data.get('fillOpacity')) || 0.45,
-        textColor: data.get('textColor'),
-        strokeColor: data.get('strokeColor'),
-        font: data.get('font'),
-        fontSize: parseFloat(data.get('fontSize')) || 14,
-        showDate: data.get('showDate') === 'on',
-        detail: data.get('detail') || '',
-        image: imgData || target?.image || null,
-        offsetX: target?.offsetX || 0,
-        offsetY: target?.offsetY || 0,
-        visible: target?.visible !== false
-    };
+    const payload = readPeriodFormPayload(e.target, target || {}, imgData);
 
     if (editingPeriodId) {
         if (target) Object.assign(target, payload);
         editingPeriodId = null;
-        document.getElementById('period-submit').textContent = "Ajouter la période";
+        periodSubmitBtn.textContent = "Ajouter la période";
     } else {
         state.periods.push({ id: crypto.randomUUID(), ...payload });
     }
     e.target.reset();
+    renderTimeline();
+});
+
+eventForm.addEventListener('input', () => {
+    if (!editingEventId) return;
+    const target = state.events.find(ev => ev.id === editingEventId);
+    if (!target) return;
+    Object.assign(target, readEventFormPayload(eventForm, target));
+    renderTimeline();
+});
+
+periodForm.addEventListener('input', () => {
+    if (!editingPeriodId) return;
+    const target = state.periods.find(pe => pe.id === editingPeriodId);
+    if (!target) return;
+    Object.assign(target, readPeriodFormPayload(periodForm, target));
+    renderTimeline();
+});
+
+eventForm.image.addEventListener('change', async () => {
+    if (!editingEventId) return;
+    const target = state.events.find(ev => ev.id === editingEventId);
+    const file = eventForm.image.files?.[0];
+    if (!target || !file) return;
+    target.image = await loadImage(file);
+    renderTimeline();
+});
+
+periodForm.image.addEventListener('change', async () => {
+    if (!editingPeriodId) return;
+    const target = state.periods.find(pe => pe.id === editingPeriodId);
+    const file = periodForm.image.files?.[0];
+    if (!target || !file) return;
+    target.image = await loadImage(file);
     renderTimeline();
 });
 
@@ -356,6 +478,7 @@ function renderEvents() {
         if (evt.visible === false) return;
         const card = document.createElement('div');
         card.className = 'event draggable';
+        if (editingEventId === evt.id) card.classList.add('is-editing');
         card.dataset.id = evt.id;
         card.dataset.type = 'event';
         card.style.backgroundColor = hexToRgba(evt.backgroundColor || '#fff', evt.backgroundOpacity ?? 1);
@@ -363,11 +486,13 @@ function renderEvents() {
         card.style.color = evt.textColor;
         card.style.width = `${evt.width || 120}px`;
 
-        const title = document.createElement('div');
-        title.className = 'label';
-        title.textContent = evt.title;
-        title.style.fontSize = `${evt.fontSize * 1.15}px`;
-        card.appendChild(title);
+        if (evt.showTitle !== false) {
+            const title = document.createElement('div');
+            title.className = 'label';
+            title.textContent = evt.title;
+            title.style.fontSize = `${evt.fontSize * 1.15}px`;
+            card.appendChild(title);
+        }
 
         if (evt.showDate !== false) {
             const date = document.createElement('div');
@@ -376,7 +501,7 @@ function renderEvents() {
             card.appendChild(date);
         }
 
-        if (evt.detail) {
+        if (evt.detail && evt.showDetail !== false) {
             const detail = document.createElement('div');
             detail.className = 'date';
             detail.style.marginTop = '4px';
@@ -389,6 +514,8 @@ function renderEvents() {
             const img = document.createElement('img');
             img.src = evt.image;
             img.alt = evt.title;
+            img.style.width = `${evt.imageWidth || evt.width || 120}px`;
+            img.style.height = `${evt.imageHeight || 90}px`;
             card.appendChild(img);
         }
 
@@ -412,12 +539,22 @@ function renderEvents() {
     return lines;
 }
 
+function periodLabelText(per) {
+    const hasTitle = per.showTitle !== false;
+    const hasDates = per.showDate !== false;
+    if (hasTitle && hasDates) return `${per.title} (${per.start} – ${per.end})`;
+    if (hasTitle) return per.title;
+    if (hasDates) return `${per.start} – ${per.end}`;
+    return '';
+}
+
 function renderPeriods() {
     const baseY = Number(state.timelineHeight) / 2 + Number(state.periodBaseOffset);
     state.periods.forEach(per => {
         if (per.visible === false) return;
         const wrap = document.createElement('div');
         wrap.className = `period draggable period-${per.style}`;
+        if (editingPeriodId === per.id) wrap.classList.add('is-editing');
         wrap.dataset.id = per.id;
         wrap.dataset.type = 'period';
         const startX = valueToX(per.start);
@@ -429,7 +566,7 @@ function renderPeriods() {
         wrap.style.top = `${y}px`;
         wrap.style.width = `${width}px`;
 
-        const labelText = per.showDate !== false ? `${per.title} (${per.start} – ${per.end})` : per.title;
+        const labelText = periodLabelText(per);
         const thickness = per.thickness ?? 4;
         const rectHeight = per.rectHeight ?? 44;
         const align = per.titleAlignment || 'middle';
@@ -438,21 +575,24 @@ function renderPeriods() {
             wrap.style.background = hexToRgba(per.fillColor, per.fillOpacity ?? 0.45);
             wrap.style.border = `${thickness}px solid ${hexToRgba(per.strokeColor, Math.min(1, (per.fillOpacity ?? 0.45) + 0.1))}`;
             wrap.style.height = `${rectHeight}px`;
+            wrap.style.overflow = per.image ? 'visible' : 'hidden';
             wrap.style.display = 'flex';
             wrap.style.flexDirection = 'column';
             wrap.style.alignItems = 'center';
             wrap.style.justifyContent = align === 'top' ? 'flex-start' : align === 'bottom' ? 'flex-end' : 'center';
-            const label = document.createElement('div');
-            label.className = 'period-label';
-            label.textContent = labelText;
-            label.style.color = per.textColor;
-            label.style.fontFamily = per.font;
-            label.style.fontSize = `${per.fontSize}px`;
-            label.style.textAlign = 'center';
-            label.style.width = '100%';
-            wrap.appendChild(label);
+            if (labelText) {
+                const label = document.createElement('div');
+                label.className = 'period-label';
+                label.textContent = labelText;
+                label.style.color = per.textColor;
+                label.style.fontFamily = per.font;
+                label.style.fontSize = `${per.fontSize}px`;
+                label.style.textAlign = 'center';
+                label.style.width = '100%';
+                wrap.appendChild(label);
+            }
 
-            if (per.detail) {
+            if (per.detail && per.showDetail !== false) {
                 const detail = document.createElement('div');
                 detail.className = 'period-detail';
                 detail.textContent = per.detail;
@@ -469,8 +609,8 @@ function renderPeriods() {
                 const img = document.createElement('img');
                 img.src = per.image;
                 img.alt = per.title;
-                img.style.maxWidth = '90%';
-                img.style.maxHeight = '80px';
+                img.style.width = `${per.imageWidth || 120}px`;
+                img.style.height = `${per.imageHeight || 80}px`;
                 img.style.marginTop = '4px';
                 img.style.objectFit = 'contain';
                 wrap.appendChild(img);
@@ -507,16 +647,18 @@ function renderPeriods() {
             labelContainer.style.alignItems = 'center';
             labelContainer.style.pointerEvents = 'none'; // So clicks pass through if overlay
 
-            const label = document.createElement('div');
-            label.className = 'period-label';
-            label.textContent = labelText;
-            label.style.color = per.textColor;
-            label.style.fontFamily = per.font;
-            label.style.fontSize = `${per.fontSize}px`;
-            label.style.textAlign = 'center';
-            labelContainer.appendChild(label);
+            if (labelText) {
+                const label = document.createElement('div');
+                label.className = 'period-label';
+                label.textContent = labelText;
+                label.style.color = per.textColor;
+                label.style.fontFamily = per.font;
+                label.style.fontSize = `${per.fontSize}px`;
+                label.style.textAlign = 'center';
+                labelContainer.appendChild(label);
+            }
 
-            if (per.detail) {
+            if (per.detail && per.showDetail !== false) {
                 const detail = document.createElement('div');
                 detail.className = 'period-detail';
                 detail.textContent = per.detail;
@@ -532,8 +674,8 @@ function renderPeriods() {
                 const img = document.createElement('img');
                 img.src = per.image;
                 img.alt = per.title;
-                img.style.maxWidth = '120px';
-                img.style.maxHeight = '80px';
+                img.style.width = `${per.imageWidth || 120}px`;
+                img.style.height = `${per.imageHeight || 80}px`;
                 img.style.marginTop = '4px';
                 img.style.objectFit = 'contain';
                 labelContainer.appendChild(img);
@@ -608,10 +750,11 @@ function attachDrag() {
             const onUp = (eUp) => {
                 const dx = eUp.clientX - startX;
                 const dy = eUp.clientY - startY;
+                const didDrag = Math.hypot(dx, dy) > 4;
                 const target = type === 'event'
                     ? state.events.find(ev => ev.id === id)
                     : state.periods.find(pe => pe.id === id);
-                if (target) {
+                if (target && didDrag) {
                     if (type === 'event') {
                         const baseX = valueToX(target.value);
                         const baseY = Number(state.timelineHeight) / 2 + Number(state.eventBaseOffset);
@@ -625,7 +768,8 @@ function attachDrag() {
                 }
                 document.removeEventListener('pointermove', onMove);
                 document.removeEventListener('pointerup', onUp);
-                renderTimeline();
+                if (didDrag) renderTimeline();
+                else startEditing(type, id);
             };
 
             document.addEventListener('pointermove', onMove);
@@ -640,6 +784,9 @@ function renderList(container, items, type) {
         const pill = document.createElement('div');
         pill.className = 'pill';
         if (item.visible === false) pill.classList.add('pill-muted');
+        if ((type === 'event' && editingEventId === item.id) || (type === 'period' && editingPeriodId === item.id)) {
+            pill.classList.add('pill-active');
+        }
         const label = document.createElement('span');
         label.textContent = type === 'event' ? `${item.title} : ${item.value}` : `${item.title} : ${item.start}-${item.end}`;
         pill.appendChild(label);
@@ -657,39 +804,7 @@ function renderList(container, items, type) {
         edit.textContent = '✏️';
         edit.title = 'Modifier';
         edit.addEventListener('click', () => {
-            if (type === 'event') {
-                editingEventId = item.id;
-                document.getElementById('event-submit').textContent = 'Mettre à jour';
-                eventForm.title.value = item.title;
-                eventForm.value.value = item.value;
-                eventForm.font.value = item.font;
-                eventForm.fontSize.value = item.fontSize;
-                eventForm.textColor.value = item.textColor;
-                eventForm.backgroundColor.value = item.backgroundColor;
-                eventForm.backgroundOpacity.value = item.backgroundOpacity ?? 1;
-                eventForm.detail.value = item.detail || '';
-                eventForm.width.value = item.width || 120;
-                eventForm.connectorColor.value = item.connectorColor || '#0f172a';
-                eventForm.showDate.checked = item.showDate !== false;
-            } else {
-                editingPeriodId = item.id;
-                document.getElementById('period-submit').textContent = 'Mettre à jour';
-                periodForm.title.value = item.title;
-                periodForm.start.value = item.start;
-                periodForm.end.value = item.end;
-                periodForm.style.value = item.style;
-                periodForm.fillOpacity.value = item.fillOpacity ?? 0.45;
-                periodForm.fillColor.value = item.fillColor;
-                periodForm.textColor.value = item.textColor;
-                periodForm.strokeColor.value = item.strokeColor;
-                periodForm.fontSize.value = item.fontSize;
-                periodForm.font.value = item.font;
-                periodForm.thickness.value = item.thickness ?? 4;
-                periodForm.titleAlignment.value = item.titleAlignment || 'middle';
-                periodForm.showDate.checked = item.showDate !== false;
-                periodForm.rectHeight.value = item.rectHeight || 44;
-                periodForm.detail.value = item.detail || '';
-            }
+            startEditing(type, item.id);
         });
         pill.appendChild(edit);
 
@@ -701,14 +816,14 @@ function renderList(container, items, type) {
                 state.events = state.events.filter(ev => ev.id !== item.id);
                 if (editingEventId === item.id) {
                     editingEventId = null;
-                    document.getElementById('event-submit').textContent = "Ajouter";
+                    eventSubmitBtn.textContent = "Ajouter";
                     eventForm.reset();
                 }
             } else {
                 state.periods = state.periods.filter(pe => pe.id !== item.id);
                 if (editingPeriodId === item.id) {
                     editingPeriodId = null;
-                    document.getElementById('period-submit').textContent = "Ajouter";
+                    periodSubmitBtn.textContent = "Ajouter";
                     periodForm.reset();
                 }
             }
@@ -949,8 +1064,26 @@ document.getElementById('load-input').addEventListener('change', (e) => {
         try {
             const data = JSON.parse(reader.result);
             Object.assign(state, defaultState, data);
-            state.events = (data.events || []).map(ev => ({ visible: true, offsetX: 0, offsetY: 0, ...ev }));
-            state.periods = (data.periods || []).map(pe => ({ visible: true, offsetX: 0, offsetY: 0, ...pe }));
+            state.events = (data.events || []).map(ev => ({
+                visible: true,
+                offsetX: 0,
+                offsetY: 0,
+                showTitle: true,
+                showDetail: true,
+                imageWidth: 120,
+                imageHeight: 90,
+                ...ev
+            }));
+            state.periods = (data.periods || []).map(pe => ({
+                visible: true,
+                offsetX: 0,
+                offsetY: 0,
+                showTitle: true,
+                showDetail: true,
+                imageWidth: 120,
+                imageHeight: 80,
+                ...pe
+            }));
             document.querySelectorAll('[data-setting]').forEach(input => {
                 const key = input.dataset.setting;
                 if (state[key] === undefined) return;
