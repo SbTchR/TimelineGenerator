@@ -56,6 +56,9 @@ const elAutosaveStatus = document.getElementById('autosave-status');
 const elToastRegion = document.getElementById('toast-region');
 const elAiPrompt = document.getElementById('ai-prompt');
 const elAiTopic = document.getElementById('ai-topic');
+const elAiEventCount = document.getElementById('ai-event-count');
+const elAiPeriodCount = document.getElementById('ai-period-count');
+const elAiImageMode = document.getElementById('ai-image-mode');
 const elAiJsonInput = document.getElementById('ai-json-input');
 const elAiImportStatus = document.getElementById('ai-import-status');
 const DRAFT_STORAGE_KEY = 'timeline-generator:draft:v2';
@@ -330,6 +333,16 @@ function safeColor(value, fallback) {
     return /^#[0-9a-f]{6}$/i.test(String(value || '')) ? value : fallback;
 }
 
+function optionalString(value) {
+    const normalized = typeof value === 'string' ? value.trim() : '';
+    return normalized || null;
+}
+
+function clampInteger(value, minimum, maximum, fallback) {
+    const parsed = Math.round(toNumber(value, fallback));
+    return Math.min(maximum, Math.max(minimum, parsed));
+}
+
 function suggestMainStep(start, end) {
     const span = Math.max(end - start, 1);
     const rough = span / 10;
@@ -371,6 +384,9 @@ function normalizeEventInput(input = {}, index = 0) {
         showDetail: input.showDetail !== false,
         detail: String(input.detail || '').trim(),
         image: typeof input.image === 'string' ? input.image : null,
+        imageAlt: optionalString(input.imageAlt),
+        imageSourceUrl: optionalString(input.imageSourceUrl),
+        imageCredit: optionalString(input.imageCredit),
         imageWidth: Math.max(10, toNumber(input.imageWidth, 120)),
         imageHeight: Math.max(10, toNumber(input.imageHeight, 90)),
         offsetX: toNumber(input.offsetX, 0),
@@ -405,12 +421,91 @@ function normalizePeriodInput(input = {}, index = 0) {
         showDetail: input.showDetail !== false,
         detail: String(input.detail || '').trim(),
         image: typeof input.image === 'string' ? input.image : null,
+        imageAlt: optionalString(input.imageAlt),
+        imageSourceUrl: optionalString(input.imageSourceUrl),
+        imageCredit: optionalString(input.imageCredit),
         imageWidth: Math.max(10, toNumber(input.imageWidth, 120)),
         imageHeight: Math.max(10, toNumber(input.imageHeight, 80)),
         offsetX: 0,
         offsetY: toNumber(input.offsetY, (index % 3) * 64),
         visible: input.visible !== false
     };
+}
+
+function projectedValueToX(value, config) {
+    const pixelsPerMain = config.mmPerMain * pxPerMm;
+    return config.padding + ((value - config.start) / config.mainStep) * pixelsPerMain;
+}
+
+function estimateEventHeight(event) {
+    let height = 28;
+    if (event.showTitle !== false) height += Math.max(34, event.fontSize * 2.5);
+    if (event.showDate !== false) height += 20;
+    if (event.detail && event.showDetail !== false) height += Math.max(38, event.fontSize * 3);
+    if (event.image) height += event.imageHeight + (event.imageCredit ? 28 : 14);
+    return height;
+}
+
+function planEventLanes(events, config) {
+    const laneRightEdges = [];
+    const assignments = new Map();
+    const sorted = events
+        .map((event, index) => ({ event, index }))
+        .sort((a, b) => a.event.value - b.event.value || a.index - b.index);
+
+    sorted.forEach(({ event, index }) => {
+        const center = projectedValueToX(event.value, config) + (event.offsetX || 0);
+        const halfWidth = (event.width || 145) / 2;
+        const left = center - halfWidth;
+        let lane = laneRightEdges.findIndex(right => left >= right + 24);
+        if (lane === -1) lane = laneRightEdges.length;
+        laneRightEdges[lane] = center + halfWidth;
+        assignments.set(index, lane);
+    });
+
+    return {
+        assignments,
+        laneCount: laneRightEdges.length
+    };
+}
+
+function arrangeImportedEvents(normalized, sourceEvents, hasCustomScale) {
+    const automaticIndexes = normalized.events
+        .map((event, index) => ({ event, index }))
+        .filter(({ index }) => !Number.isFinite(parseFloat(sourceEvents[index]?.offsetY)));
+
+    if (!automaticIndexes.length) return;
+
+    let plan = planEventLanes(automaticIndexes.map(item => item.event), normalized);
+    if (!hasCustomScale) {
+        while (plan.laneCount > 3 && normalized.mmPerMain < 60) {
+            normalized.mmPerMain = Math.min(60, normalized.mmPerMain * 1.22);
+            plan = planEventLanes(automaticIndexes.map(item => item.event), normalized);
+        }
+    }
+
+    const laneHeights = Array(plan.laneCount).fill(0);
+    automaticIndexes.forEach(({ event }, automaticIndex) => {
+        const lane = plan.assignments.get(automaticIndex);
+        laneHeights[lane] = Math.max(laneHeights[lane], estimateEventHeight(event));
+    });
+
+    const laneOffsets = [];
+    let nextOffset = 0;
+    laneHeights.forEach((height, lane) => {
+        laneOffsets[lane] = nextOffset;
+        nextOffset += height + 24;
+    });
+
+    automaticIndexes.forEach(({ event }, automaticIndex) => {
+        event.offsetY = laneOffsets[plan.assignments.get(automaticIndex)];
+    });
+
+    const requiredHalfHeight = normalized.eventBaseOffset + nextOffset + 34;
+    normalized.timelineHeight = Math.max(
+        normalized.timelineHeight,
+        Math.ceil((requiredHalfHeight * 2) / 10) * 10
+    );
 }
 
 function normalizeTimelinePayload(payload) {
@@ -452,6 +547,7 @@ function normalizeTimelinePayload(payload) {
     if (source.timelineHeight === undefined) normalized.timelineHeight = 950;
     if (source.eventBaseOffset === undefined) normalized.eventBaseOffset = 20;
     if (source.periodBaseOffset === undefined) normalized.periodBaseOffset = -290;
+    arrangeImportedEvents(normalized, source.events, source.mmPerMain !== undefined);
     normalized.orientation = source.orientation === 'portrait' ? 'portrait' : 'landscape';
     return normalized;
 }
@@ -481,13 +577,48 @@ function focusTimelineContent() {
     });
 }
 
-function buildAiPrompt(topic) {
+function readAiPromptOptions() {
+    return {
+        eventCount: clampInteger(elAiEventCount?.value, 1, 30, 10),
+        periodCount: clampInteger(elAiPeriodCount?.value, 0, 10, 3),
+        imageMode: ['none', 'highlights', 'all'].includes(elAiImageMode?.value)
+            ? elAiImageMode.value
+            : 'none'
+    };
+}
+
+function buildAiPrompt(topic, options = {}) {
     const subject = String(topic || '').trim() || '[INDIQUEZ ICI LE THÈME]';
+    const eventCount = clampInteger(options.eventCount, 1, 30, 10);
+    const periodCount = clampInteger(options.periodCount, 0, 10, 3);
+    const imageMode = ['none', 'highlights', 'all'].includes(options.imageMode)
+        ? options.imageMode
+        : 'none';
+    const populatedImageFields = `,
+      "image": "https://upload.wikimedia.org/chemin/vers/image.jpg",
+      "imageAlt": "Description factuelle de l’image",
+      "imageSourceUrl": "https://commons.wikimedia.org/wiki/File:Nom_du_fichier.jpg",
+      "imageCredit": "Auteur ou institution — licence"`;
+    const emptyImageFields = `,
+      "image": null,
+      "imageAlt": null,
+      "imageSourceUrl": null,
+      "imageCredit": null`;
+    const eventImageExample = imageMode === 'none' ? '' : populatedImageFields;
+    const periodImageExample = imageMode === 'all'
+        ? populatedImageFields
+        : imageMode === 'highlights' ? emptyImageFields : '';
+    const imageInstruction = imageMode === 'none'
+        ? `- Ne fournis aucune image. Pour chaque élément, omets image, imageAlt, imageSourceUrl et imageCredit.`
+        : imageMode === 'all'
+            ? `- Ajoute une illustration fiable à chacun des ${eventCount} événements${periodCount ? ` et à chacune des ${periodCount} périodes` : ''}.`
+            : `- Illustre uniquement les éléments les plus structurants : au maximum ${Math.min(6, Math.max(2, Math.ceil(eventCount / 3)))} événements et ${Math.min(2, periodCount)} périodes. Laisse les autres propriétés d’image à null ou omets-les.`;
     return `Tu es un historien-documentaliste et un concepteur de frises chronologiques.
 
 MISSION
 Crée une frise claire, fiable et synthétique sur le thème suivant :
 « ${subject} »
+La frise doit contenir exactement ${eventCount} événements et exactement ${periodCount} périodes.
 
 FORMAT DE RÉPONSE OBLIGATOIRE
 Réponds UNIQUEMENT avec un objet JSON valide, sans Markdown, sans commentaire avant ou après, sans bloc \`\`\`.
@@ -501,7 +632,7 @@ Utilise exactement cette structure :
     {
       "title": "Titre court",
       "value": 1957,
-      "detail": "Une phrase factuelle et concise.",
+      "detail": "Une phrase factuelle et concise."${eventImageExample},
       "backgroundColor": "#FFE7E2",
       "textColor": "#111C44",
       "connectorColor": "#FF806F"
@@ -512,7 +643,7 @@ Utilise exactement cette structure :
       "title": "Nom de la période",
       "start": 1950,
       "end": 1969,
-      "detail": "Une phrase qui explique cette phase.",
+      "detail": "Une phrase qui explique cette phase."${periodImageExample},
       "fillColor": "#DFF8F5",
       "strokeColor": "#43C4B8",
       "textColor": "#111C44"
@@ -521,27 +652,38 @@ Utilise exactement cette structure :
 }
 
 RÈGLES ÉDITORIALES
-- Crée entre 8 et 14 événements vraiment structurants, classés chronologiquement.
-- Crée entre 2 et 5 périodes cohérentes qui aident à comprendre les grandes phases.
+- Crée exactement ${eventCount} événements vraiment structurants, classés chronologiquement.
+- Crée exactement ${periodCount} périodes cohérentes qui aident à comprendre les grandes phases${periodCount === 0 ? ' : le tableau periods doit donc être vide' : ''}.
 - Utilise uniquement des nombres pour start, end, mainStep, value et les bornes des périodes. Pour une date avant notre ère, utilise un nombre négatif.
 - Choisis start et end avec une petite marge autour du premier et du dernier événement.
 - Choisis un mainStep lisible : 1, 2, 5, 10, 20, 50, 100, etc. selon l’échelle du sujet.
 - Les titres doivent être courts. Les détails doivent tenir en une phrase utile.
 - N’invente pas de fait incertain. Si la chronologie exacte est débattue, reste sobre et signale l’incertitude dans detail.
-- Répartis les couleurs entre ces pastels : événements #FFE7E2, #FFF0CF, #E7EFFF, #F0E7FF ; périodes #DFF8F5, #E6EFFF, #F0E7FF.
-- Ne fournis aucune image, aucun HTML et aucune propriété supplémentaire inutile.
+- Construis une palette cohérente de 3 ou 4 familles maximum. Utilise une même famille pour les événements d’une même phase ou catégorie et son accent plus soutenu pour connectorColor. Palette conseillée : fond/accent #FFE7E2/#FF806F, #FFF0CF/#E6A93F, #E7EFFF/#6E91E8, #F0E7FF/#9B78DD.
+- Fais correspondre les périodes aux mêmes familles visuelles avec #DFF8F5/#43C4B8, #E6EFFF/#6E91E8 ou #F0E7FF/#9B78DD. Garde textColor à #111C44 pour la lisibilité.
+- N’ajoute pas offsetX ni offsetY : l’application calcule automatiquement des rangées sans chevauchement. Évite néanmoins les dates identiques ou presque identiques sauf si elles sont historiquement nécessaires.
+- Avant de répondre, imagine chaque événement comme une carte de 145 px de large : les cartes proches doivent pouvoir être réparties sur des rangées distinctes et le récit doit rester lisible de gauche à droite.
+
+RÈGLES POUR LES IMAGES
+${imageInstruction}
+- Utilise en priorité Wikimedia Commons, Europeana, Gallica, la NASA, l’ESA ou le site officiel d’un musée, d’une bibliothèque ou d’une institution reconnue.
+- image doit être une URL HTTPS directe et stable vers un vrai fichier JPG, PNG ou WebP. Pour Wikimedia Commons, préfère une URL upload.wikimedia.org obtenue depuis la page du fichier.
+- imageSourceUrl doit pointer vers la page publique qui documente l’image, sa provenance et sa licence. imageCredit indique au minimum l’auteur ou l’institution et la licence lorsqu’elle est connue. imageAlt décrit sobrement ce qui est visible.
+- N’utilise jamais une miniature de moteur de recherche, une URL Google/Bing Images, un réseau social, une URL temporaire/signée ou une page HTML dans image.
+- Vérifie que l’image correspond réellement au sujet et que son usage est dans le domaine public ou sous licence ouverte. Si tu ne peux pas vérifier une source et une URL directe fiables, mets les quatre propriétés d’image à null.
+- Ne fournis aucun HTML et aucune propriété supplémentaire inutile.
 
 MODE D’EMPLOI DE L’APPLICATION
 - Dans un chat classique : renvoie seulement le JSON. L’utilisateur ouvrira « Assistant IA » dans l’application, collera le résultat à l’étape 3 puis cliquera sur « Créer la frise ».
 - Si tu contrôles directement le navigateur : consulte d’abord window.timelineAgent.describe(), appelle window.timelineAgent.importState(objetJSON), puis vérifie le résultat avec window.timelineAgent.getState().
-- L’application normalise les valeurs manquantes et expose aussi addEvent(), addPeriod() et clear().
+- L’application normalise les valeurs manquantes, place automatiquement les événements importés sur des rangées sans collision et expose aussi addEvent(), addPeriod() et clear().
 
 VÉRIFICATION AVANT RÉPONSE
-Vérifie que le JSON est syntaxiquement valide, que end > start, que chaque événement est dans la plage, que chaque période a end >= start et que la chronologie raconte un récit compréhensible.`;
+Vérifie que le JSON est syntaxiquement valide, qu’il contient exactement ${eventCount} événements et ${periodCount} périodes, que end > start, que chaque événement est dans la plage, que chaque période a end >= start, que les couleurs suivent les familles définies, que les sources d’images sont fiables et que la chronologie raconte un récit compréhensible sans chevauchement conceptuel.`;
 }
 
 function updateAiPrompt() {
-    if (elAiPrompt) elAiPrompt.value = buildAiPrompt(elAiTopic?.value);
+    if (elAiPrompt) elAiPrompt.value = buildAiPrompt(elAiTopic?.value, readAiPromptOptions());
 }
 
 async function copyText(text) {
@@ -560,6 +702,10 @@ async function copyText(text) {
 }
 
 elAiTopic?.addEventListener('input', updateAiPrompt);
+[elAiEventCount, elAiPeriodCount, elAiImageMode].forEach(control => {
+    control?.addEventListener('input', updateAiPrompt);
+    control?.addEventListener('change', updateAiPrompt);
+});
 document.getElementById('copy-ai-prompt')?.addEventListener('click', async () => {
     const button = document.getElementById('copy-ai-prompt');
     try {
@@ -940,14 +1086,7 @@ function renderEvents() {
             card.appendChild(detail);
         }
 
-        if (evt.image) {
-            const img = document.createElement('img');
-            img.src = evt.image;
-            img.alt = evt.title;
-            img.style.width = `${evt.imageWidth || evt.width || 120}px`;
-            img.style.height = `${evt.imageHeight || 90}px`;
-            card.appendChild(img);
-        }
+        appendItemImage(card, evt, evt.imageWidth || evt.width || 120, evt.imageHeight || 90);
 
         elTimeline.appendChild(card);
 
@@ -976,6 +1115,98 @@ function periodLabelText(per) {
     if (hasTitle) return per.title;
     if (hasDates) return `${per.start} – ${per.end}`;
     return '';
+}
+
+function appendItemImage(container, item, width, height) {
+    if (!item.image) return;
+    const img = document.createElement('img');
+    img.className = 'item-image';
+    if (/^https:\/\//i.test(item.image)) {
+        img.crossOrigin = 'anonymous';
+        img.referrerPolicy = 'no-referrer';
+    }
+    img.src = item.image;
+    img.alt = item.imageAlt || item.title || '';
+    img.style.width = `${width}px`;
+    img.style.height = `${height}px`;
+    container.appendChild(img);
+
+    if (item.imageCredit) {
+        const credit = document.createElement(item.imageSourceUrl ? 'a' : 'span');
+        credit.className = 'image-credit';
+        credit.textContent = item.imageCredit;
+        if (item.imageSourceUrl) {
+            credit.href = item.imageSourceUrl;
+            credit.target = '_blank';
+            credit.rel = 'noopener noreferrer';
+            credit.addEventListener('pointerdown', event => event.stopPropagation());
+            credit.addEventListener('click', event => event.stopPropagation());
+        }
+        container.appendChild(credit);
+    }
+}
+
+function createPeriodContent(per, labelText, { callout = false } = {}) {
+    const content = document.createElement('div');
+    content.className = callout ? 'period-content period-callout' : 'period-content';
+    content.style.setProperty('--period-accent', per.strokeColor);
+
+    if (labelText) {
+        const label = document.createElement('div');
+        label.className = 'period-label';
+        label.textContent = labelText;
+        label.style.color = per.textColor;
+        label.style.fontFamily = per.font;
+        label.style.fontSize = `${per.fontSize}px`;
+        content.appendChild(label);
+    }
+
+    if (per.detail && per.showDetail !== false) {
+        const detail = document.createElement('div');
+        detail.className = 'period-detail';
+        detail.textContent = per.detail;
+        detail.style.color = per.textColor;
+        detail.style.fontFamily = per.font;
+        detail.style.fontSize = `${per.fontSize * 0.85}px`;
+        detail.style.opacity = '0.9';
+        content.appendChild(detail);
+    }
+
+    appendItemImage(content, per, per.imageWidth || 120, per.imageHeight || 80);
+    return content;
+}
+
+function estimatePeriodLabelWidth(per, labelText) {
+    if (!labelText) return 0;
+    const canvas = estimatePeriodLabelWidth.canvas
+        || (estimatePeriodLabelWidth.canvas = document.createElement('canvas'));
+    const context = canvas.getContext('2d');
+    if (!context) return labelText.length * per.fontSize * 0.58;
+    context.font = `700 ${per.fontSize}px "${per.font || 'DM Sans'}"`;
+    return context.measureText(labelText).width;
+}
+
+function periodNeedsExternalLabel(per, width, labelText) {
+    if (!labelText && !(per.detail && per.showDetail !== false) && !per.image) return false;
+    const labelRequirement = Math.min(220, estimatePeriodLabelWidth(per, labelText) * 0.62 + 22);
+    const detailRequirement = per.detail && per.showDetail !== false ? 148 : 0;
+    const imageRequirement = per.image ? Math.min(240, (per.imageWidth || 120) + 20) : 0;
+    return width < Math.max(92, labelRequirement, detailRequirement, imageRequirement);
+}
+
+function positionPeriodCallout(callout, periodX, periodWidth) {
+    const calloutWidth = callout.offsetWidth;
+    const timelineContentWidth = timelineWidth();
+    const segmentCenter = periodX + periodWidth / 2;
+    const halfCallout = calloutWidth / 2;
+    const calloutCenter = Math.min(
+        Math.max(segmentCenter, halfCallout + 12),
+        timelineContentWidth - halfCallout - 12
+    );
+    const localCenter = calloutCenter - periodX;
+    const anchorWithinCallout = halfCallout + segmentCenter - calloutCenter;
+    callout.style.left = `${localCenter}px`;
+    callout.style.setProperty('--callout-anchor-x', `${anchorWithinCallout}px`);
 }
 
 function renderPeriods() {
@@ -1010,40 +1241,19 @@ function renderPeriods() {
             wrap.style.flexDirection = 'column';
             wrap.style.alignItems = 'center';
             wrap.style.justifyContent = align === 'top' ? 'flex-start' : align === 'bottom' ? 'flex-end' : 'center';
-            if (labelText) {
-                const label = document.createElement('div');
-                label.className = 'period-label';
-                label.textContent = labelText;
-                label.style.color = per.textColor;
-                label.style.fontFamily = per.font;
-                label.style.fontSize = `${per.fontSize}px`;
-                label.style.textAlign = 'center';
-                label.style.width = '100%';
-                wrap.appendChild(label);
-            }
+            const content = createPeriodContent(per, labelText);
+            wrap.appendChild(content);
+            elTimeline.appendChild(wrap);
 
-            if (per.detail && per.showDetail !== false) {
-                const detail = document.createElement('div');
-                detail.className = 'period-detail';
-                detail.textContent = per.detail;
-                detail.style.color = per.textColor;
-                detail.style.fontFamily = per.font;
-                detail.style.fontSize = `${per.fontSize * 0.85}px`;
-                detail.style.textAlign = 'center';
-                detail.style.width = '100%';
-                detail.style.opacity = '0.9';
-                wrap.appendChild(detail);
-            }
-
-            if (per.image) {
-                const img = document.createElement('img');
-                img.src = per.image;
-                img.alt = per.title;
-                img.style.width = `${per.imageWidth || 120}px`;
-                img.style.height = `${per.imageHeight || 80}px`;
-                img.style.marginTop = '4px';
-                img.style.objectFit = 'contain';
-                wrap.appendChild(img);
+            if (periodNeedsExternalLabel(per, width, labelText)) {
+                content.remove();
+                wrap.classList.add('has-external-label');
+                wrap.style.overflow = 'visible';
+                const callout = createPeriodContent(per, labelText, { callout: true });
+                wrap.appendChild(callout);
+                positionPeriodCallout(callout, x, width);
+            } else if (content.scrollHeight > wrap.clientHeight + 1) {
+                wrap.style.height = `${content.scrollHeight + thickness * 2}px`;
             }
         } else {
             wrap.style.display = 'flex';
@@ -1071,47 +1281,17 @@ function renderPeriods() {
             capEnd.style.opacity = per.fillOpacity ?? 1;
             line.appendChild(capEnd);
 
-            const labelContainer = document.createElement('div');
-            labelContainer.style.display = 'flex';
-            labelContainer.style.flexDirection = 'column';
-            labelContainer.style.alignItems = 'center';
-            labelContainer.style.pointerEvents = 'none'; // So clicks pass through if overlay
+            const labelContainer = createPeriodContent(per, labelText);
+            labelContainer.style.pointerEvents = 'none';
 
-            if (labelText) {
-                const label = document.createElement('div');
-                label.className = 'period-label';
-                label.textContent = labelText;
-                label.style.color = per.textColor;
-                label.style.fontFamily = per.font;
-                label.style.fontSize = `${per.fontSize}px`;
-                label.style.textAlign = 'center';
-                labelContainer.appendChild(label);
-            }
-
-            if (per.detail && per.showDetail !== false) {
-                const detail = document.createElement('div');
-                detail.className = 'period-detail';
-                detail.textContent = per.detail;
-                detail.style.color = per.textColor;
-                detail.style.fontFamily = per.font;
-                detail.style.fontSize = `${per.fontSize * 0.85}px`;
-                detail.style.textAlign = 'center';
-                detail.style.opacity = '0.9';
-                labelContainer.appendChild(detail);
-            }
-
-            if (per.image) {
-                const img = document.createElement('img');
-                img.src = per.image;
-                img.alt = per.title;
-                img.style.width = `${per.imageWidth || 120}px`;
-                img.style.height = `${per.imageHeight || 80}px`;
-                img.style.marginTop = '4px';
-                img.style.objectFit = 'contain';
-                labelContainer.appendChild(img);
-            }
-
-            if (align === 'top') {
+            if (periodNeedsExternalLabel(per, width, labelText)) {
+                wrap.classList.add('has-external-label');
+                wrap.appendChild(line);
+                const callout = createPeriodContent(per, labelText, { callout: true });
+                wrap.appendChild(callout);
+                elTimeline.appendChild(wrap);
+                positionPeriodCallout(callout, x, width);
+            } else if (align === 'top') {
                 wrap.appendChild(labelContainer);
                 wrap.appendChild(line);
             } else if (align === 'bottom') {
@@ -1119,7 +1299,7 @@ function renderPeriods() {
                 wrap.appendChild(labelContainer);
             } else {
                 wrap.appendChild(line);
-                const overlay = labelContainer.cloneNode(true);
+                const overlay = labelContainer;
                 overlay.style.position = 'absolute';
                 overlay.style.top = '50%';
                 overlay.style.left = '50%';
@@ -1130,7 +1310,7 @@ function renderPeriods() {
                 wrap.appendChild(overlay);
             }
         }
-        elTimeline.appendChild(wrap);
+        if (!wrap.isConnected) elTimeline.appendChild(wrap);
     });
 }
 
@@ -1310,7 +1490,7 @@ function renderTimeline() {
     persistDraft();
     window.dispatchEvent(new CustomEvent('timeline:statechange', {
         detail: {
-            version: '1.0',
+            version: '1.1',
             eventCount: state.events.length,
             periodCount: state.periods.length
         }
@@ -1630,7 +1810,7 @@ function getAgentDescriptor() {
 }
 
 window.timelineAgent = Object.freeze({
-    version: '1.0',
+    version: '1.1',
     describe: () => getAgentDescriptor(),
     getState: () => JSON.parse(JSON.stringify(state)),
     importState: payload => applyTimelinePayload(payload),
@@ -1654,7 +1834,7 @@ window.timelineAgent = Object.freeze({
         renderTimeline();
         return window.timelineAgent.getState();
     },
-    getPrompt: topic => buildAiPrompt(topic)
+    getPrompt: (topic, options = {}) => buildAiPrompt(topic, options)
 });
 document.documentElement.dataset.timelineAgentApi = window.timelineAgent.version;
 
