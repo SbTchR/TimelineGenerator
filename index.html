@@ -4,367 +4,709 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Frise chronologique paramétrable</title>
+  <meta name="description"
+    content="Créez, organisez et exportez des frises chronologiques avec un éditeur visuel compatible avec les agents IA.">
+  <meta name="theme-color" content="#f7f8fc">
+  <title>Frise chronologique — Éditeur visuel</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
-    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=DM+Sans:wght@400;500;600&family=Playfair+Display:wght@500&family=Roboto:wght@400;500&family=Poppins:wght@400;500&family=Montserrat:wght@500;600&family=Lora:wght@500&family=Manrope:wght@500;600&family=Open+Sans:wght@400;600&family=Lato:wght@400;700&family=Oswald:wght@500&display=swap"
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Playfair+Display:wght@500&family=Roboto:wght@400;500&family=Poppins:wght@400;500&family=Montserrat:wght@500;600&family=Lora:wght@500&family=Manrope:wght@500;600&family=Open+Sans:wght@400;600&family=Lato:wght@400;700&family=Oswald:wght@500&display=swap"
     rel="stylesheet">
+  <link rel="alternate" type="application/json" href="agent-manifest.json" title="Contrat pour agents IA">
   <link rel="stylesheet" href="style.css">
 </head>
 
-<body>
+<body data-mobile-view="canvas">
   <header class="topbar">
-    <div class="title-block">
-      <div class="title">Frise chronologique paramétrable</div>
-      <p class="subtitle">Configurez la grille, ajoutez des événements et périodes, déplacez-les librement, exportez en
-        PDF multi-pages.</p>
-    </div>
-    <div class="top-actions">
-      <div class="action-group">
-        <button class="ghost" id="toggle-lists">Masquer listes</button>
-        <button class="ghost" id="open-settings">🔧</button>
-        <button class="ghost" id="save-state">💾</button>
-        <label class="ghost file-label">
-          Charger une frise
-          <input type="file" id="load-input" accept="application/json">
+    <a class="brand" href="#" aria-label="Frise chronologique, revenir à l’éditeur">
+      <span class="brand-mark" aria-hidden="true">
+        <span></span><span></span><span></span>
+      </span>
+      <span class="brand-copy">
+        <strong>Frise chronologique</strong>
+        <small>Créez, organisez et exportez vos récits dans le temps.</small>
+      </span>
+    </a>
+
+    <nav class="top-actions" aria-label="Actions du document">
+      <div class="action-cluster document-actions">
+        <button class="button button-quiet button-icon-mobile" id="new-timeline" type="button"
+          data-agent-action="new" title="Créer une nouvelle frise">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          <span>Nouveau</span>
+        </button>
+        <button class="button button-quiet button-icon-mobile" id="save-state" type="button"
+          data-agent-action="download-json" title="Enregistrer au format JSON">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M5 4h11l3 3v13H5zM8 4v6h8V4M8 20v-6h8v6" />
+          </svg>
+          <span>Enregistrer</span>
+        </button>
+        <label class="button button-quiet button-icon-mobile file-label" title="Charger une frise JSON">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M3 7h7l2 2h9v10H3zM3 7V5h7l2 2" />
+          </svg>
+          <span>Charger</span>
+          <input type="file" id="load-input" accept="application/json,.json" data-agent-action="load-json">
         </label>
-
-        <select id="pdf-orientation" class="compact">
-          <option value="landscape">▬</option>
-          <option value="portrait">▮</option>
-        </select>
-
-        <button id="save-image">PNG</button>
-        <button id="export-pdf">PDF</button>
-        <button id="export-html">HTML</button>
       </div>
-    </div>
+
+      <button class="button button-ai" id="open-ai" type="button" data-agent-action="open-ai-assistant"
+        aria-label="Assistant IA">
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <path d="M12 3l1.2 4.1L17 9l-3.8 1.9L12 15l-1.2-4.1L7 9l3.8-1.9zM18.5 14l.8 2.7L22 18l-2.7 1.3-.8 2.7-.8-2.7L15 18l2.7-1.3zM5 14l.7 2.3L8 17.5l-2.3 1.2L5 21l-.7-2.3L2 17.5l2.3-1.2z" />
+        </svg>
+        <span>Assistant IA</span>
+      </button>
+
+      <button class="button button-quiet button-square mobile-more" id="mobile-more" type="button"
+        aria-label="Plus d’actions" aria-expanded="false" aria-controls="mobile-actions-popover">
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+          <circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none" />
+        </svg>
+      </button>
+
+      <div class="action-cluster export-actions" aria-label="Options d’export">
+        <label class="orientation-control" title="Orientation du PDF">
+          <span class="sr-only">Orientation PDF</span>
+          <select id="pdf-orientation" aria-label="Orientation du PDF">
+            <option value="landscape">Paysage</option>
+            <option value="portrait">Portrait</option>
+          </select>
+        </label>
+        <button class="button button-export" id="save-image" type="button" data-agent-action="export-png">
+          <span>PNG</span>
+        </button>
+        <button class="button button-export" id="export-pdf" type="button" data-agent-action="export-pdf">
+          <span>PDF</span>
+        </button>
+        <button class="button button-export" id="export-html" type="button" data-agent-action="export-html">
+          <span>HTML</span>
+        </button>
+      </div>
+    </nav>
   </header>
 
-  <div class="modal hidden" id="settings-modal">
-    <div class="modal-backdrop" id="close-settings"></div>
-    <div class="modal-content card">
-      <div class="modal-head">
-        <h3>Paramètres généraux de la frise</h3>
-        <button class="ghost" id="close-settings-btn">Fermer</button>
-      </div>
-
-      <div class="settings-section">
-        <h4>Plage & échelle</h4>
-        <div class="form-grid">
-          <label>Début
-            <input id="start" data-setting="start" type="number" value="1900" step="1">
-          </label>
-          <label>Fin
-            <input id="end" data-setting="end" type="number" value="2025" step="1">
-          </label>
-          <label>Unités par graduation principale
-            <input data-setting="mainStep" type="number" value="10" step="1" min="0.01">
-          </label>
-          <label>Graduations secondaires par intervalle
-            <input data-setting="secondaryPerMain" type="number" value="4" step="1" min="0">
-          </label>
-          <label>mm entre graduations principales
-            <input data-setting="mmPerMain" type="number" value="15" step="1" min="1">
-          </label>
-        </div>
-      </div>
-
-      <div class="settings-section">
-        <h4>Dimensions & offsets</h4>
-        <div class="form-grid">
-          <label>Hauteur zone (px)
-            <input data-setting="timelineHeight" type="number" value="700" step="10" min="200">
-          </label>
-          <label>Hauteur graduations principales (px)
-            <input data-setting="mainTickHeight" type="number" value="20" step="1" min="2">
-          </label>
-          <label>Hauteur graduations secondaires (px)
-            <input data-setting="secondaryTickHeight" type="number" value="12" step="1" min="2">
-          </label>
-          <label>Distance dates (px)
-            <input data-setting="labelOffset" type="number" value="6" step="1">
-          </label>
-          <label>Décalage vertical par défaut événements
-            <input data-setting="eventBaseOffset" type="number" value="-180" step="5">
-          </label>
-          <label>Décalage vertical par défaut périodes
-            <input data-setting="periodBaseOffset" type="number" value="-180" step="5">
-          </label>
-        </div>
-      </div>
-
-      <div class="settings-section">
-        <h4>Couleurs</h4>
-        <div class="form-grid">
-          <label>Couleur fond frise
-            <div style="display: flex; gap: 8px; align-items: center;">
-              <input data-setting="backgroundColor" type="color" value="#FFFFFF" style="flex: 1;">
-              <label style="flex-direction: row; gap: 4px; font-size: 11px; align-items: center;">
-                <input type="checkbox" id="bg-transparent"> Transp.
-              </label>
-            </div>
-          </label>
-          <label>Couleur ligne de base
-            <input data-setting="baselineColor" type="color" value="#0f172a">
-          </label>
-          <label>Couleur graduations principales
-            <input data-setting="mainTickColor" type="color" value="#0f172a">
-          </label>
-          <label>Couleur graduations secondaires
-            <input data-setting="secondaryTickColor" type="color" value="#94a3b8">
-          </label>
-          <label>Couleur des labels
-            <input data-setting="labelColor" type="color" value="#0f172a">
-          </label>
-        </div>
-      </div>
-
-      <div class="settings-section">
-        <h4>Labels principaux</h4>
-        <div class="form-grid">
-          <label>Taille texte graduations (px)
-            <input data-setting="labelSize" type="number" value="12" step="1">
-          </label>
-          <label>Police graduations
-            <select data-setting="labelFont">
-              <option value="Space Grotesk">Space Grotesk</option>
-              <option value="DM Sans">DM Sans</option>
-              <option value="Playfair Display">Playfair Display</option>
-              <option value="Roboto">Roboto</option>
-              <option value="Poppins">Poppins</option>
-              <option value="Montserrat">Montserrat</option>
-              <option value="Lora">Lora</option>
-              <option value="Manrope">Manrope</option>
-            </select>
-          </label>
-        </div>
-      </div>
-
-      <div class="settings-section">
-        <h4>Labels secondaires</h4>
-        <div class="form-grid">
-          <label class="checkbox-label" style="grid-column: 1 / -1;">
-            <input data-setting="showSecondaryLabels" type="checkbox">
-            Afficher les graduations secondaires
-          </label>
-          <label>Taille texte (px)
-            <input data-setting="secondaryLabelSize" type="number" value="10" step="1">
-          </label>
-          <label>Couleur texte
-            <input data-setting="secondaryLabelColor" type="color" value="#6b7a90">
-          </label>
-          <label>Distance dates (px)
-            <input data-setting="secondaryLabelOffset" type="number" value="4" step="1">
-          </label>
-          <label>Police graduations secondaires
-            <select data-setting="secondaryLabelFont">
-              <option value="Space Grotesk">Space Grotesk</option>
-              <option value="DM Sans">DM Sans</option>
-              <option value="Playfair Display">Playfair Display</option>
-              <option value="Roboto">Roboto</option>
-              <option value="Poppins">Poppins</option>
-              <option value="Montserrat">Montserrat</option>
-              <option value="Lora">Lora</option>
-              <option value="Manrope">Manrope</option>
-            </select>
-          </label>
-        </div>
-      </div>
-
-      <div class="modal-actions">
-        <button class="ghost" id="reset-settings">Réinitialiser</button>
-        <button id="apply-settings">Appliquer</button>
-      </div>
-    </div>
+  <div class="mobile-actions-popover hidden" id="mobile-actions-popover" aria-label="Actions supplémentaires">
+    <button type="button" data-proxy-action="new-timeline">Nouvelle frise</button>
+    <button type="button" data-proxy-action="save-state">Enregistrer en JSON</button>
+    <button type="button" data-proxy-action="load-input">Charger un JSON</button>
+    <button type="button" data-proxy-action="open-settings">Paramètres</button>
+    <button type="button" data-proxy-action="save-image">Exporter en PNG</button>
+    <button type="button" data-proxy-action="export-pdf">Exporter en PDF</button>
+    <button type="button" data-proxy-action="export-html">Exporter en HTML</button>
   </div>
 
-  <main>
-    <aside class="sidebar">
-      <div class="card">
-        <h3>Événements</h3>
-        <form id="event-form" class="form-grid">
-          <label>Titre
-            <input name="title" type="text" placeholder="Ex: Lancement produit" required>
-          </label>
-          <label>Position (valeur)
-            <input name="value" type="number" step="0.1" required>
-          </label>
-          <select name="font">
-            <option value="Space Grotesk">Space Grotesk</option>
-            <option value="DM Sans">DM Sans</option>
-            <option value="Playfair Display">Playfair Display</option>
-            <option value="Roboto">Roboto</option>
-            <option value="Open Sans">Open Sans</option>
-            <option value="Lato">Lato</option>
-            <option value="Montserrat">Montserrat</option>
-            <option value="Oswald">Oswald</option>
-          </select>
-          <label>Taille (px)
-            <input name="fontSize" type="number" value="15" min="8">
-          </label>
-          <label>Largeur (px)
-            <input name="width" type="number" value="120" min="50">
-          </label>
-          <label>Couleur texte
-            <input name="textColor" type="color" value="#0f172a">
-          </label>
-          <label>Couleur fond
-            <input name="backgroundColor" type="color" value="#e0f2fe">
-          </label>
-          <label>Opacité fond
-            <input name="backgroundOpacity" type="range" min="0.05" max="1" step="0.05" value="1">
-          </label>
-          <label>Couleur du lien
-            <input name="connectorColor" type="color" value="#0f172a">
-          </label>
-          <label class="checkbox-label">
-            <input name="showDate" type="checkbox" checked>
-            Afficher la date
-          </label>
-          <label class="checkbox-label">
-            <input name="showTitle" type="checkbox" checked>
-            Afficher le titre
-          </label>
-          <label class="checkbox-label">
-            <input name="showDetail" type="checkbox" checked>
-            Afficher les notes
-          </label>
-          <label>Image (optionnel)
-            <input name="image" type="file" accept="image/*">
-          </label>
-          <label>Largeur image (px)
-            <input name="imageWidth" type="number" value="120" min="10">
-          </label>
-          <label>Hauteur image (px)
-            <input name="imageHeight" type="number" value="90" min="10">
-          </label>
-          <label>Texte complémentaire
-            <textarea name="detail" placeholder="Notes"></textarea>
-          </label>
-          <div class="section-row" style="grid-column: 1 / -1;">
-            <button type="submit" id="event-submit">Ajouter</button>
-            <button type="button" class="ghost" id="clear-events">Vider</button>
-          </div>
-        </form>
+  <nav class="mobile-view-tabs" aria-label="Sections de l’éditeur">
+    <button type="button" data-mobile-view="editor">Créer</button>
+    <button class="is-active" type="button" data-mobile-view="canvas">Frise</button>
+    <button type="button" data-mobile-view="items">Éléments</button>
+  </nav>
+
+  <main class="app-shell">
+    <aside class="editor-panel panel" data-mobile-panel="editor" aria-label="Créer un élément">
+      <div class="panel-tabs" role="tablist" aria-label="Type d’élément">
+        <button class="panel-tab is-active" id="event-tab" type="button" role="tab" aria-selected="true"
+          aria-controls="event-editor" data-editor-tab="event">
+          <span class="tab-dot tab-dot-event" aria-hidden="true"></span>
+          Événement
+        </button>
+        <button class="panel-tab" id="period-tab" type="button" role="tab" aria-selected="false"
+          aria-controls="period-editor" data-editor-tab="period">
+          <span class="tab-dot tab-dot-period" aria-hidden="true"></span>
+          Période
+        </button>
       </div>
 
-      <div class="cardP">
-        <h3>Périodes</h3>
-        <form id="period-form" class="form-grid">
-          <label>Titre
-            <input name="title" type="text" placeholder="Ex: Période industrielle" required>
-          </label>
-          <label>Début (valeur)
-            <input name="start" type="number" step="0.1" required>
-          </label>
-          <label>Fin (valeur)
-            <input name="end" type="number" step="0.1" required>
-          </label>
-          <label>Style
-            <select name="style">
-              <option value="rect">Rectangle coloré</option>
-              <option value="line">Ligne avec bornes</option>
-            </select>
-          </label>
-          <label>Épaisseur (px)
-            <input name="thickness" type="number" value="4" min="1">
-          </label>
-          <label>Hauteur encadré (px)
-            <input name="rectHeight" type="number" value="44" min="12">
-          </label>
-          <label>Alignement vertical du titre
-            <select name="titleAlignment">
-              <option value="middle">Milieu</option>
-              <option value="top">Haut</option>
-              <option value="bottom">Bas</option>
-            </select>
-          </label>
-          <label>Opacité (fond)
-            <input name="fillOpacity" type="range" min="0.05" max="1" step="0.05" value="0.45">
-          </label>
-          <label>Couleur fond / ligne
-            <input name="fillColor" type="color" value="#cffafe">
-          </label>
-          <label>Couleur texte
-            <input name="textColor" type="color" value="#0f172a">
-          </label>
-          <label>Couleur contour
-            <input name="strokeColor" type="color" value="#0ea5e9">
-          </label>
-          <label>Taille texte (px)
-            <input name="fontSize" type="number" value="14" min="8">
-          </label>
-          <label>Police
-            <select name="font">
-              <option value="Space Grotesk">Space Grotesk</option>
-              <option value="DM Sans">DM Sans</option>
-              <option value="Playfair Display">Playfair Display</option>
-              <option value="Roboto">Roboto</option>
-              <option value="Open Sans">Open Sans</option>
-              <option value="Lato">Lato</option>
-              <option value="Montserrat">Montserrat</option>
-              <option value="Oswald">Oswald</option>
-            </select>
-          </label>
-          <label class="checkbox-label">
-            <input name="showDate" type="checkbox" checked>
-            Afficher les dates
-          </label>
-          <label class="checkbox-label">
-            <input name="showTitle" type="checkbox" checked>
-            Afficher le titre
-          </label>
-          <label class="checkbox-label">
-            <input name="showDetail" type="checkbox" checked>
-            Afficher les notes
-          </label>
-          <label>Image (optionnel)
-            <input name="image" type="file" accept="image/*">
-          </label>
-          <label>Largeur image (px)
-            <input name="imageWidth" type="number" value="120" min="10">
-          </label>
-          <label>Hauteur image (px)
-            <input name="imageHeight" type="number" value="80" min="10">
-          </label>
-          <label>Texte complémentaire
-            <textarea name="detail" placeholder="Notes"></textarea>
-          </label>
-          <div class="section-row" style="grid-column: 1 / -1;">
-            <button type="submit" id="period-submit">Ajouter</button>
-            <button type="button" class="ghost" id="clear-periods">Vider</button>
+      <section class="editor-section" id="event-editor" role="tabpanel" aria-labelledby="event-tab">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Point dans le temps</p>
+            <h1>Créer un événement</h1>
+          </div>
+          <span class="item-count" id="event-count">0</span>
+        </div>
+
+        <form id="event-form" class="creation-form">
+          <div class="form-grid form-grid-primary">
+            <label class="span-2">Titre
+              <input name="title" type="text" placeholder="Ex. Premier vol de Spoutnik 1" required
+                autocomplete="off">
+            </label>
+            <label class="span-2">Date ou valeur
+              <input name="value" type="number" step="0.1" placeholder="1957" required inputmode="decimal">
+            </label>
+            <label>Couleur du fond
+              <input name="backgroundColor" type="color" value="#ffe7e2">
+            </label>
+            <label>Couleur du lien
+              <input name="connectorColor" type="color" value="#ff806f">
+            </label>
+            <label class="span-2">Note courte
+              <textarea name="detail" rows="3" placeholder="Ajoutez un contexte utile…"></textarea>
+            </label>
+          </div>
+
+          <details class="advanced-options">
+            <summary>Options avancées</summary>
+            <div class="form-grid">
+              <label>Police
+                <select name="font">
+                  <option value="DM Sans">DM Sans</option>
+                  <option value="Space Grotesk">Space Grotesk</option>
+                  <option value="Playfair Display">Playfair Display</option>
+                  <option value="Roboto">Roboto</option>
+                  <option value="Open Sans">Open Sans</option>
+                  <option value="Lato">Lato</option>
+                  <option value="Montserrat">Montserrat</option>
+                  <option value="Oswald">Oswald</option>
+                </select>
+              </label>
+              <label>Taille du texte
+                <input name="fontSize" type="number" value="15" min="8">
+              </label>
+              <label>Largeur
+                <input name="width" type="number" value="140" min="50">
+              </label>
+              <label>Couleur du texte
+                <input name="textColor" type="color" value="#111c44">
+              </label>
+              <label class="span-2">Opacité du fond
+                <input name="backgroundOpacity" type="range" min="0.05" max="1" step="0.05" value="1">
+              </label>
+              <label class="checkbox-label">
+                <input name="showDate" type="checkbox" checked>
+                Afficher la date
+              </label>
+              <label class="checkbox-label">
+                <input name="showTitle" type="checkbox" checked>
+                Afficher le titre
+              </label>
+              <label class="checkbox-label span-2">
+                <input name="showDetail" type="checkbox" checked>
+                Afficher la note
+              </label>
+              <label class="span-2">Image (facultatif)
+                <input name="image" type="file" accept="image/*">
+              </label>
+              <label>Largeur de l’image
+                <input name="imageWidth" type="number" value="120" min="10">
+              </label>
+              <label>Hauteur de l’image
+                <input name="imageHeight" type="number" value="90" min="10">
+              </label>
+            </div>
+          </details>
+
+          <div class="form-actions">
+            <button class="button button-primary" type="submit" id="event-submit"
+              data-agent-action="add-event">
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              Ajouter l’événement
+            </button>
+            <button type="button" class="button button-danger-quiet" id="clear-events">Tout effacer</button>
           </div>
         </form>
-      </div>
+      </section>
+
+      <section class="editor-section hidden" id="period-editor" role="tabpanel" aria-labelledby="period-tab">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Intervalle temporel</p>
+            <h1>Créer une période</h1>
+          </div>
+          <span class="item-count" id="period-count">0</span>
+        </div>
+
+        <form id="period-form" class="creation-form">
+          <div class="form-grid form-grid-primary">
+            <label class="span-2">Titre
+              <input name="title" type="text" placeholder="Ex. Début de l’ère spatiale" required
+                autocomplete="off">
+            </label>
+            <label>Début
+              <input name="start" type="number" step="0.1" placeholder="1957" required inputmode="decimal">
+            </label>
+            <label>Fin
+              <input name="end" type="number" step="0.1" placeholder="1969" required inputmode="decimal">
+            </label>
+            <label>Couleur du fond
+              <input name="fillColor" type="color" value="#dff8f5">
+            </label>
+            <label>Couleur du contour
+              <input name="strokeColor" type="color" value="#53cfc3">
+            </label>
+            <label class="span-2">Note courte
+              <textarea name="detail" rows="3" placeholder="Ajoutez un contexte utile…"></textarea>
+            </label>
+          </div>
+
+          <details class="advanced-options">
+            <summary>Options avancées</summary>
+            <div class="form-grid">
+              <label>Style
+                <select name="style">
+                  <option value="rect">Rectangle coloré</option>
+                  <option value="line">Ligne avec bornes</option>
+                </select>
+              </label>
+              <label>Épaisseur
+                <input name="thickness" type="number" value="2" min="1">
+              </label>
+              <label>Hauteur
+                <input name="rectHeight" type="number" value="52" min="12">
+              </label>
+              <label>Position du titre
+                <select name="titleAlignment">
+                  <option value="middle">Milieu</option>
+                  <option value="top">Haut</option>
+                  <option value="bottom">Bas</option>
+                </select>
+              </label>
+              <label class="span-2">Opacité du fond
+                <input name="fillOpacity" type="range" min="0.05" max="1" step="0.05" value="0.72">
+              </label>
+              <label>Couleur du texte
+                <input name="textColor" type="color" value="#111c44">
+              </label>
+              <label>Taille du texte
+                <input name="fontSize" type="number" value="14" min="8">
+              </label>
+              <label class="span-2">Police
+                <select name="font">
+                  <option value="DM Sans">DM Sans</option>
+                  <option value="Space Grotesk">Space Grotesk</option>
+                  <option value="Playfair Display">Playfair Display</option>
+                  <option value="Roboto">Roboto</option>
+                  <option value="Open Sans">Open Sans</option>
+                  <option value="Lato">Lato</option>
+                  <option value="Montserrat">Montserrat</option>
+                  <option value="Oswald">Oswald</option>
+                </select>
+              </label>
+              <label class="checkbox-label">
+                <input name="showDate" type="checkbox" checked>
+                Afficher les dates
+              </label>
+              <label class="checkbox-label">
+                <input name="showTitle" type="checkbox" checked>
+                Afficher le titre
+              </label>
+              <label class="checkbox-label span-2">
+                <input name="showDetail" type="checkbox" checked>
+                Afficher la note
+              </label>
+              <label class="span-2">Image (facultatif)
+                <input name="image" type="file" accept="image/*">
+              </label>
+              <label>Largeur de l’image
+                <input name="imageWidth" type="number" value="120" min="10">
+              </label>
+              <label>Hauteur de l’image
+                <input name="imageHeight" type="number" value="80" min="10">
+              </label>
+            </div>
+          </details>
+
+          <div class="form-actions">
+            <button class="button button-primary" type="submit" id="period-submit"
+              data-agent-action="add-period">
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              Ajouter la période
+            </button>
+            <button type="button" class="button button-danger-quiet" id="clear-periods">Tout effacer</button>
+          </div>
+        </form>
+      </section>
+
+      <p class="editor-tip">
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <path d="M9 18h6M10 22h4M8.2 14.5A6 6 0 1 1 15.8 14.5c-.9.7-1.5 1.7-1.6 2.5H9.8c-.1-.8-.7-1.8-1.6-2.5z" />
+        </svg>
+        Cliquez sur un élément de la frise pour le modifier, ou faites-le glisser pour le repositionner.
+      </p>
     </aside>
 
-    <section class="main-content">
+    <section class="canvas-panel" data-mobile-panel="canvas" aria-labelledby="canvas-title">
+      <header class="canvas-header">
+        <div>
+          <p class="section-kicker">Aperçu en temps réel</p>
+          <h1 id="canvas-title" contenteditable="true" role="textbox" aria-label="Titre de la frise"
+            spellcheck="true">Ma frise chronologique</h1>
+        </div>
+        <div class="canvas-header-actions">
+          <span class="autosave-status" id="autosave-status">
+            <span aria-hidden="true"></span>
+            Enregistré localement
+          </span>
+          <button class="button button-quiet button-square" id="open-settings" type="button"
+            data-agent-action="open-settings" aria-label="Paramètres généraux" title="Paramètres généraux">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1z" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
       <div class="timeline-wrapper">
-        <div class="timeline-scroll" id="timeline-scroll">
+        <div class="empty-state" id="empty-state">
+          <div class="empty-state-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48">
+              <path d="M8 24h32M14 18v12M24 14v20M34 18v12" />
+              <circle cx="24" cy="24" r="3" />
+            </svg>
+          </div>
+          <h2>Votre histoire commence ici</h2>
+          <p>Ajoutez un événement ou une période, ou demandez à une IA de préparer toute la frise.</p>
+          <div>
+            <button class="button button-primary" type="button" data-empty-action="create">Ajouter un élément</button>
+            <button class="button button-ai" type="button" data-empty-action="ai">Créer avec l’IA</button>
+          </div>
+        </div>
+        <div class="timeline-scroll" id="timeline-scroll" tabindex="0"
+          aria-label="Canevas de la frise chronologique, défilement horizontal et vertical">
           <div id="timeline-space"></div>
         </div>
       </div>
+
+      <footer class="canvas-footer">
+        <div class="canvas-hint">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M8 8l-4 4 4 4M16 8l4 4-4 4M4 12h16" />
+          </svg>
+          Faites glisser pour déplacer les éléments. Faites défiler pour explorer la frise.
+        </div>
+        <div class="canvas-meta" id="timeline-meta">0 élément · 1900–2025</div>
+      </footer>
     </section>
+
+    <aside class="elements-panel panel" id="listing-panel" data-mobile-panel="items" aria-label="Éléments créés">
+      <header class="elements-header">
+        <div>
+          <p class="section-kicker">Organisation</p>
+          <h1>Éléments</h1>
+        </div>
+        <button class="button button-quiet button-compact" id="toggle-lists" type="button">Tout masquer</button>
+      </header>
+
+      <section class="list-section">
+        <div class="list-section-heading">
+          <h2><span class="tab-dot tab-dot-period" aria-hidden="true"></span>Périodes</h2>
+          <span id="period-list-count">0</span>
+        </div>
+        <div class="pill-list" id="period-list"></div>
+        <p class="list-empty" id="period-list-empty">Aucune période pour le moment.</p>
+      </section>
+
+      <section class="list-section">
+        <div class="list-section-heading">
+          <h2><span class="tab-dot tab-dot-event" aria-hidden="true"></span>Événements</h2>
+          <span id="event-list-count">0</span>
+        </div>
+        <div class="pill-list" id="event-list"></div>
+        <p class="list-empty" id="event-list-empty">Aucun événement pour le moment.</p>
+      </section>
+    </aside>
   </main>
 
-  <aside class="listing-panel" id="listing-panel">
-    <div class="card">
-      <div class="panel-head">
-        <h3>Événements créés</h3>
-      </div>
-      <div class="pill-list" id="event-list"></div>
-    </div>
-    <div class="cardP">
-      <div class="panel-head">
-        <h3>Périodes créées</h3>
-      </div>
-      <div class="pill-list" id="period-list"></div>
-    </div>
-  </aside>
+  <button class="mobile-add-button" id="mobile-add" type="button" aria-label="Ajouter un élément">
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+    Ajouter
+  </button>
 
+  <div class="modal hidden" id="settings-modal" role="dialog" aria-modal="true"
+    aria-labelledby="settings-title" aria-hidden="true">
+    <button class="modal-backdrop" id="close-settings" type="button" aria-label="Fermer les paramètres"></button>
+    <div class="modal-content settings-modal-content">
+      <header class="modal-head">
+        <div>
+          <p class="section-kicker">Personnalisation</p>
+          <h2 id="settings-title">Paramètres de la frise</h2>
+        </div>
+        <button class="button button-quiet button-square" id="close-settings-btn" type="button"
+          aria-label="Fermer">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      </header>
 
+      <div class="settings-grid">
+        <section class="settings-section">
+          <h3>Plage et échelle</h3>
+          <div class="form-grid">
+            <label>Début
+              <input id="start" data-setting="start" type="number" value="1900" step="1">
+            </label>
+            <label>Fin
+              <input id="end" data-setting="end" type="number" value="2025" step="1">
+            </label>
+            <label>Pas principal
+              <input data-setting="mainStep" type="number" value="10" step="1" min="0.01">
+            </label>
+            <label>Graduations secondaires
+              <input data-setting="secondaryPerMain" type="number" value="4" step="1" min="0">
+            </label>
+            <label class="span-2">Millimètres entre les graduations
+              <input data-setting="mmPerMain" type="number" value="15" step="1" min="1">
+            </label>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h3>Dimensions et positions</h3>
+          <div class="form-grid">
+            <label>Hauteur du canevas
+              <input data-setting="timelineHeight" type="number" value="950" step="10" min="200">
+            </label>
+            <label>Graduations principales
+              <input data-setting="mainTickHeight" type="number" value="20" step="1" min="2">
+            </label>
+            <label>Graduations secondaires
+              <input data-setting="secondaryTickHeight" type="number" value="12" step="1" min="2">
+            </label>
+            <label>Distance des dates
+              <input data-setting="labelOffset" type="number" value="6" step="1">
+            </label>
+            <label>Décalage des événements
+              <input data-setting="eventBaseOffset" type="number" value="20" step="5">
+            </label>
+            <label>Décalage des périodes
+              <input data-setting="periodBaseOffset" type="number" value="-290" step="5">
+            </label>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h3>Couleurs</h3>
+          <div class="form-grid">
+            <label>Fond de la frise
+              <span class="color-with-toggle">
+                <input data-setting="backgroundColor" type="color" value="#ffffff">
+                <span class="inline-check"><input type="checkbox" id="bg-transparent"> Transparent</span>
+              </span>
+            </label>
+            <label>Ligne de base
+              <input data-setting="baselineColor" type="color" value="#111c44">
+            </label>
+            <label>Graduations principales
+              <input data-setting="mainTickColor" type="color" value="#111c44">
+            </label>
+            <label>Graduations secondaires
+              <input data-setting="secondaryTickColor" type="color" value="#a8b0c5">
+            </label>
+            <label class="span-2">Libellés
+              <input data-setting="labelColor" type="color" value="#111c44">
+            </label>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h3>Libellés</h3>
+          <div class="form-grid">
+            <label>Taille du texte
+              <input data-setting="labelSize" type="number" value="12" step="1">
+            </label>
+            <label>Police
+              <select data-setting="labelFont">
+                <option value="DM Sans">DM Sans</option>
+                <option value="Space Grotesk">Space Grotesk</option>
+                <option value="Playfair Display">Playfair Display</option>
+                <option value="Roboto">Roboto</option>
+                <option value="Poppins">Poppins</option>
+                <option value="Montserrat">Montserrat</option>
+                <option value="Lora">Lora</option>
+                <option value="Manrope">Manrope</option>
+              </select>
+            </label>
+            <label class="checkbox-label span-2">
+              <input data-setting="showSecondaryLabels" type="checkbox">
+              Afficher les libellés secondaires
+            </label>
+            <label>Taille secondaire
+              <input data-setting="secondaryLabelSize" type="number" value="10" step="1">
+            </label>
+            <label>Couleur secondaire
+              <input data-setting="secondaryLabelColor" type="color" value="#6f7890">
+            </label>
+            <label>Distance secondaire
+              <input data-setting="secondaryLabelOffset" type="number" value="4" step="1">
+            </label>
+            <label>Police secondaire
+              <select data-setting="secondaryLabelFont">
+                <option value="DM Sans">DM Sans</option>
+                <option value="Space Grotesk">Space Grotesk</option>
+                <option value="Playfair Display">Playfair Display</option>
+                <option value="Roboto">Roboto</option>
+                <option value="Poppins">Poppins</option>
+                <option value="Montserrat">Montserrat</option>
+                <option value="Lora">Lora</option>
+                <option value="Manrope">Manrope</option>
+              </select>
+            </label>
+          </div>
+        </section>
+      </div>
+
+      <footer class="modal-actions">
+        <button class="button button-quiet" id="reset-settings" type="button">Réinitialiser</button>
+        <button class="button button-primary" id="apply-settings" type="button">Appliquer</button>
+      </footer>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="ai-modal" role="dialog" aria-modal="true" aria-labelledby="ai-modal-title"
+    aria-hidden="true">
+    <button class="modal-backdrop" id="close-ai" type="button" aria-label="Fermer l’assistant IA"></button>
+    <div class="modal-content ai-modal-content">
+      <header class="modal-head ai-modal-head">
+        <div class="ai-title">
+          <span class="ai-title-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 3l1.2 4.1L17 9l-3.8 1.9L12 15l-1.2-4.1L7 9l3.8-1.9zM18.5 14l.8 2.7L22 18l-2.7 1.3-.8 2.7-.8-2.7L15 18l2.7-1.3z" />
+            </svg>
+          </span>
+          <div>
+            <p class="section-kicker">Création assistée</p>
+            <h2 id="ai-modal-title">Créer une frise avec une IA</h2>
+          </div>
+        </div>
+        <button class="button button-quiet button-square" id="close-ai-btn" type="button" aria-label="Fermer">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      </header>
+
+      <ol class="ai-steps" aria-label="Étapes">
+        <li class="is-active"><span>1</span>Choisir le thème</li>
+        <li><span>2</span>Interroger l’IA</li>
+        <li><span>3</span>Importer le résultat</li>
+      </ol>
+
+      <div class="ai-workflow">
+        <section class="ai-section">
+          <div class="ai-section-number">1</div>
+          <div class="ai-section-content">
+            <h3>Quel sujet voulez-vous raconter ?</h3>
+            <p>Le thème est automatiquement intégré au prompt.</p>
+            <label class="topic-field">
+              <span class="sr-only">Thème de la frise</span>
+              <input id="ai-topic" type="text" value="La conquête spatiale"
+                placeholder="Ex. L’histoire de la photographie">
+            </label>
+          </div>
+        </section>
+
+        <section class="ai-section">
+          <div class="ai-section-number">2</div>
+          <div class="ai-section-content">
+            <div class="ai-section-heading">
+              <div>
+                <h3>Copiez le prompt dans ChatGPT ou une autre IA</h3>
+                <p>Le prompt contient le schéma, les règles éditoriales et le mode d’emploi pour un agent.</p>
+              </div>
+              <button class="button button-primary copy-button" id="copy-ai-prompt" type="button"
+                data-agent-action="copy-prompt">
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <rect x="8" y="8" width="11" height="11" rx="2" />
+                  <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
+                </svg>
+                Copier le prompt
+              </button>
+            </div>
+            <textarea id="ai-prompt" class="code-area prompt-preview" readonly spellcheck="false"
+              aria-label="Prompt à copier"></textarea>
+          </div>
+        </section>
+
+        <section class="ai-section">
+          <div class="ai-section-number">3</div>
+          <div class="ai-section-content">
+            <h3>Collez ici le JSON renvoyé par l’IA</h3>
+            <p>Les données sont validées et normalisées avant de remplacer la frise actuelle.</p>
+            <textarea id="ai-json-input" class="code-area" spellcheck="false"
+              placeholder='{"title":"La conquête spatiale","start":1950,"end":2030,"events":[…],"periods":[…]}'
+              aria-describedby="ai-import-status"></textarea>
+            <div class="ai-import-actions">
+              <p id="ai-import-status" role="status">En attente d’un résultat JSON.</p>
+              <button class="button button-primary" id="import-ai-json" type="button"
+                data-agent-action="import-ai-json">
+                Créer la frise
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <details class="agent-details">
+        <summary>Accès direct pour un agent navigateur</summary>
+        <p>Une API stable est disponible dans la page via <code>window.timelineAgent</code>. Utilisez
+          <code>describe()</code> pour lire le contrat, <code>importState(data)</code> pour créer une frise et
+          <code>getState()</code> pour vérifier le résultat.</p>
+      </details>
+    </div>
+  </div>
+
+  <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+
+  <script id="timeline-agent-schema" type="application/schema+json">
+  {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "TimelineAgentPayload",
+    "type": "object",
+    "required": ["title", "start", "end", "events", "periods"],
+    "properties": {
+      "title": { "type": "string" },
+      "start": { "type": "number" },
+      "end": { "type": "number" },
+      "mainStep": { "type": "number", "exclusiveMinimum": 0 },
+      "events": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["title", "value"],
+          "properties": {
+            "title": { "type": "string" },
+            "value": { "type": "number" },
+            "detail": { "type": "string" },
+            "backgroundColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "textColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "connectorColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+          }
+        }
+      },
+      "periods": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["title", "start", "end"],
+          "properties": {
+            "title": { "type": "string" },
+            "start": { "type": "number" },
+            "end": { "type": "number" },
+            "detail": { "type": "string" },
+            "fillColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "strokeColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "textColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+          }
+        }
+      }
+    }
+  }
+  </script>
   <script src="script.js"></script>
 </body>
 
