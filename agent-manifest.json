@@ -1,15 +1,15 @@
 {
   "name": "Frise chronologique",
-  "version": "1.0",
+  "version": "1.1",
   "language": "fr",
   "description": "Editeur visuel de frises chronologiques pilotable par donnees structurees.",
   "entrypoint": "index.html",
   "browserApi": "window.timelineAgent",
   "recommendedFlow": [
     "Appeler window.timelineAgent.describe() pour lire le contrat et le schema.",
-    "Construire un objet JSON contenant title, start, end, events et periods.",
+    "Construire un objet JSON contenant title, start, end, events et periods, sans offset manuel.",
     "Appeler window.timelineAgent.importState(payload).",
-    "Verifier le resultat avec window.timelineAgent.getState()."
+    "Verifier le resultat avec window.timelineAgent.getState(); l'import repartit automatiquement les evenements pour eviter les collisions."
   ],
   "methods": {
     "describe": {
@@ -44,9 +44,19 @@
     },
     "getPrompt": {
       "arguments": [
-        "topic:string"
+        "topic:string",
+        "options?:{eventCount,periodCount,imageMode}"
       ],
       "returns": "string"
+    }
+  },
+  "aiGenerationOptions": {
+    "eventCount": { "type": "integer", "minimum": 1, "maximum": 30, "default": 10 },
+    "periodCount": { "type": "integer", "minimum": 0, "maximum": 10, "default": 3 },
+    "imageMode": {
+      "type": "string",
+      "enum": ["none", "highlights", "all"],
+      "default": "highlights"
     }
   },
   "domActions": {
@@ -59,6 +69,13 @@
     "exportPng": "[data-agent-action='export-png']",
     "exportPdf": "[data-agent-action='export-pdf']",
     "exportHtml": "[data-agent-action='export-html']"
+  },
+  "domInputs": {
+    "aiTopic": "#ai-topic",
+    "aiEventCount": "#ai-event-count",
+    "aiPeriodCount": "#ai-period-count",
+    "aiImageMode": "#ai-image-mode",
+    "aiJson": "#ai-json-input"
   },
   "stateChangeEvent": "timeline:statechange",
   "schemaSelector": "#timeline-agent-schema"

@@ -607,6 +607,25 @@
               <input id="ai-topic" type="text" value="La conquête spatiale"
                 placeholder="Ex. L’histoire de la photographie">
             </label>
+            <div class="ai-brief-grid" aria-label="Paramètres de génération">
+              <label>Événements
+                <input id="ai-event-count" type="number" value="10" min="1" max="30" step="1"
+                  inputmode="numeric">
+              </label>
+              <label>Périodes
+                <input id="ai-period-count" type="number" value="3" min="0" max="10" step="1"
+                  inputmode="numeric">
+              </label>
+              <label>Illustrations
+                <select id="ai-image-mode">
+                  <option value="none">Sans image</option>
+                  <option value="highlights" selected>Éléments clés uniquement</option>
+                  <option value="all">Tous les éléments</option>
+                </select>
+              </label>
+            </div>
+            <p class="ai-brief-hint">Le prompt demandera exactement ces quantités et précisera les sources d’images
+              acceptées.</p>
           </div>
         </section>
 
@@ -682,6 +701,10 @@
             "title": { "type": "string" },
             "value": { "type": "number" },
             "detail": { "type": "string" },
+            "image": { "type": ["string", "null"], "format": "uri" },
+            "imageAlt": { "type": ["string", "null"] },
+            "imageSourceUrl": { "type": ["string", "null"], "format": "uri" },
+            "imageCredit": { "type": ["string", "null"] },
             "backgroundColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
             "textColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
             "connectorColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
@@ -698,6 +721,10 @@
             "start": { "type": "number" },
             "end": { "type": "number" },
             "detail": { "type": "string" },
+            "image": { "type": ["string", "null"], "format": "uri" },
+            "imageAlt": { "type": ["string", "null"] },
+            "imageSourceUrl": { "type": ["string", "null"], "format": "uri" },
+            "imageCredit": { "type": ["string", "null"] },
             "fillColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
             "strokeColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
             "textColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
