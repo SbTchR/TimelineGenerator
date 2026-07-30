@@ -1,0 +1,65 @@
+{
+  "name": "Frise chronologique",
+  "version": "1.0",
+  "language": "fr",
+  "description": "Editeur visuel de frises chronologiques pilotable par donnees structurees.",
+  "entrypoint": "index.html",
+  "browserApi": "window.timelineAgent",
+  "recommendedFlow": [
+    "Appeler window.timelineAgent.describe() pour lire le contrat et le schema.",
+    "Construire un objet JSON contenant title, start, end, events et periods.",
+    "Appeler window.timelineAgent.importState(payload).",
+    "Verifier le resultat avec window.timelineAgent.getState()."
+  ],
+  "methods": {
+    "describe": {
+      "arguments": [],
+      "returns": "Descriptor"
+    },
+    "getState": {
+      "arguments": [],
+      "returns": "TimelineState"
+    },
+    "importState": {
+      "arguments": [
+        "TimelinePayload|string"
+      ],
+      "returns": "TimelineState"
+    },
+    "addEvent": {
+      "arguments": [
+        "EventInput"
+      ],
+      "returns": "Event"
+    },
+    "addPeriod": {
+      "arguments": [
+        "PeriodInput"
+      ],
+      "returns": "Period"
+    },
+    "clear": {
+      "arguments": [],
+      "returns": "TimelineState"
+    },
+    "getPrompt": {
+      "arguments": [
+        "topic:string"
+      ],
+      "returns": "string"
+    }
+  },
+  "domActions": {
+    "openAiAssistant": "[data-agent-action='open-ai-assistant']",
+    "copyPrompt": "[data-agent-action='copy-prompt']",
+    "importAiJson": "[data-agent-action='import-ai-json']",
+    "addEvent": "[data-agent-action='add-event']",
+    "addPeriod": "[data-agent-action='add-period']",
+    "downloadJson": "[data-agent-action='download-json']",
+    "exportPng": "[data-agent-action='export-png']",
+    "exportPdf": "[data-agent-action='export-pdf']",
+    "exportHtml": "[data-agent-action='export-html']"
+  },
+  "stateChangeEvent": "timeline:statechange",
+  "schemaSelector": "#timeline-agent-schema"
+}

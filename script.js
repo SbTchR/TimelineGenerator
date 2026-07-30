@@ -5,6 +5,7 @@ const A4 = {
 };
 
 const state = {
+    title: 'Ma frise chronologique',
     start: 1900,
     end: 2025,
     mainStep: 10,
@@ -19,16 +20,16 @@ const state = {
     labelColor: '#0f172a',
     labelSize: 12,
     labelOffset: 6,
-    labelFont: 'Space Grotesk',
+    labelFont: 'DM Sans',
     showSecondaryLabels: false,
     secondaryLabelSize: 10,
     secondaryLabelColor: '#6b7a90',
     secondaryLabelOffset: 4,
-    secondaryLabelFont: 'Space Grotesk',
-    timelineHeight: 520,
+    secondaryLabelFont: 'DM Sans',
+    timelineHeight: 950,
     padding: 60,
-    eventBaseOffset: -120,
-    periodBaseOffset: 60,
+    eventBaseOffset: 20,
+    periodBaseOffset: -290,
     events: [],
     periods: [],
     exportScale: 4,
@@ -47,26 +48,188 @@ const elTimelineScroll = document.getElementById('timeline-scroll');
 const toggleListsBtn = document.getElementById('toggle-lists');
 const eventSubmitBtn = document.getElementById('event-submit');
 const periodSubmitBtn = document.getElementById('period-submit');
+const elAiModal = document.getElementById('ai-modal');
+const elEmptyState = document.getElementById('empty-state');
+const elCanvasTitle = document.getElementById('canvas-title');
+const elTimelineMeta = document.getElementById('timeline-meta');
+const elAutosaveStatus = document.getElementById('autosave-status');
+const elToastRegion = document.getElementById('toast-region');
+const elAiPrompt = document.getElementById('ai-prompt');
+const elAiTopic = document.getElementById('ai-topic');
+const elAiJsonInput = document.getElementById('ai-json-input');
+const elAiImportStatus = document.getElementById('ai-import-status');
+const DRAFT_STORAGE_KEY = 'timeline-generator:draft:v2';
 let listsVisible = true;
 
-elTimelineScroll.style.height = Math.max(320, Number(state.timelineHeight) + 160) + 'px';
+elTimelineScroll.style.height = '100%';
 
 function toggleModal(show) {
     elSettingsModal.classList.toggle('hidden', !show);
+    elSettingsModal.setAttribute('aria-hidden', String(!show));
+    document.body.classList.toggle('modal-open', show || !elAiModal.classList.contains('hidden'));
+    if (show) document.getElementById('close-settings-btn')?.focus();
+}
+
+function toggleAiModal(show) {
+    elAiModal.classList.toggle('hidden', !show);
+    elAiModal.setAttribute('aria-hidden', String(!show));
+    document.body.classList.toggle('modal-open', show || !elSettingsModal.classList.contains('hidden'));
+    if (show) {
+        updateAiPrompt();
+        window.setTimeout(() => elAiTopic?.focus(), 0);
+    }
+}
+
+function createId(prefix = 'item') {
+    if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
+    return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function showToast(message, type = 'success') {
+    if (!elToastRegion) return;
+    const toast = document.createElement('div');
+    toast.className = `toast${type === 'error' ? ' is-error' : ''}`;
+    toast.textContent = message;
+    elToastRegion.appendChild(toast);
+    window.setTimeout(() => toast.remove(), 3200);
+}
+
+function syncSettingsControls() {
+    document.querySelectorAll('[data-setting]').forEach(input => {
+        const key = input.dataset.setting;
+        if (state[key] === undefined) return;
+        if (input.type === 'checkbox') input.checked = Boolean(state[key]);
+        else if (key === 'backgroundColor' && state[key] === 'transparent') input.value = '#ffffff';
+        else input.value = state[key];
+    });
+
+    const transparent = state.backgroundColor === 'transparent';
+    const transparentToggle = document.getElementById('bg-transparent');
+    const backgroundInput = document.querySelector('[data-setting="backgroundColor"]');
+    if (transparentToggle) transparentToggle.checked = transparent;
+    if (backgroundInput) backgroundInput.disabled = transparent;
+    document.getElementById('pdf-orientation').value = state.orientation;
+}
+
+function persistDraft() {
+    try {
+        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(state));
+        if (elAutosaveStatus) {
+            elAutosaveStatus.lastChild.textContent = ' Enregistré localement';
+        }
+    } catch (error) {
+        if (elAutosaveStatus) {
+            elAutosaveStatus.lastChild.textContent = ' Sauvegarde locale indisponible';
+        }
+    }
+}
+
+function setMobileView(view) {
+    if (!['editor', 'canvas', 'items'].includes(view)) return;
+    document.body.dataset.mobileView = view;
+    document.querySelectorAll('.mobile-view-tabs [data-mobile-view]').forEach(button => {
+        const active = button.dataset.mobileView === view;
+        button.classList.toggle('is-active', active);
+        button.setAttribute('aria-current', active ? 'page' : 'false');
+    });
+}
+
+function setEditorTab(type) {
+    const isEvent = type === 'event';
+    document.getElementById('event-editor').classList.toggle('hidden', !isEvent);
+    document.getElementById('period-editor').classList.toggle('hidden', isEvent);
+    document.querySelectorAll('[data-editor-tab]').forEach(button => {
+        const active = button.dataset.editorTab === type;
+        button.classList.toggle('is-active', active);
+        button.setAttribute('aria-selected', String(active));
+        button.tabIndex = active ? 0 : -1;
+    });
+}
+
+function closeMobileActions() {
+    document.getElementById('mobile-actions-popover')?.classList.add('hidden');
+    document.getElementById('mobile-more')?.setAttribute('aria-expanded', 'false');
 }
 
 toggleListsBtn?.addEventListener('click', () => {
     listsVisible = !listsVisible;
     document.body.classList.toggle('hide-lists', !listsVisible);
-    toggleListsBtn.textContent = listsVisible ? 'Masquer listes' : 'Afficher listes';
+    toggleListsBtn.textContent = listsVisible ? 'Tout masquer' : 'Tout afficher';
 });
 
 document.getElementById('open-settings').addEventListener('click', () => toggleModal(true));
 document.getElementById('close-settings').addEventListener('click', () => toggleModal(false));
 document.getElementById('close-settings-btn').addEventListener('click', () => toggleModal(false));
+document.getElementById('open-ai').addEventListener('click', () => toggleAiModal(true));
+document.getElementById('close-ai').addEventListener('click', () => toggleAiModal(false));
+document.getElementById('close-ai-btn').addEventListener('click', () => toggleAiModal(false));
 document.getElementById('apply-settings').addEventListener('click', () => {
     toggleModal(false);
     renderTimeline();
+});
+
+document.querySelectorAll('[data-editor-tab]').forEach(button => {
+    button.addEventListener('click', () => setEditorTab(button.dataset.editorTab));
+});
+
+document.querySelectorAll('.mobile-view-tabs [data-mobile-view]').forEach(button => {
+    button.addEventListener('click', () => setMobileView(button.dataset.mobileView));
+});
+
+document.getElementById('mobile-add').addEventListener('click', () => {
+    setMobileView('editor');
+    setEditorTab('event');
+    window.setTimeout(() => document.querySelector('#event-form input[name="title"]')?.focus(), 0);
+});
+
+document.querySelector('[data-empty-action="create"]').addEventListener('click', () => {
+    setMobileView('editor');
+    setEditorTab('event');
+    window.setTimeout(() => document.querySelector('#event-form input[name="title"]')?.focus(), 0);
+});
+
+document.querySelector('[data-empty-action="ai"]').addEventListener('click', () => toggleAiModal(true));
+
+document.getElementById('mobile-more').addEventListener('click', () => {
+    const popover = document.getElementById('mobile-actions-popover');
+    const willOpen = popover.classList.contains('hidden');
+    popover.classList.toggle('hidden', !willOpen);
+    document.getElementById('mobile-more').setAttribute('aria-expanded', String(willOpen));
+});
+
+document.querySelectorAll('[data-proxy-action]').forEach(button => {
+    button.addEventListener('click', () => {
+        closeMobileActions();
+        document.getElementById(button.dataset.proxyAction)?.click();
+    });
+});
+
+document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+        toggleModal(false);
+        toggleAiModal(false);
+        closeMobileActions();
+    }
+});
+
+document.addEventListener('pointerdown', event => {
+    const popover = document.getElementById('mobile-actions-popover');
+    if (popover?.classList.contains('hidden')) return;
+    if (!popover.contains(event.target) && !document.getElementById('mobile-more').contains(event.target)) {
+        closeMobileActions();
+    }
+});
+
+elCanvasTitle.addEventListener('input', () => {
+    state.title = elCanvasTitle.textContent.trim() || 'Ma frise chronologique';
+    persistDraft();
+});
+
+elCanvasTitle.addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        elCanvasTitle.blur();
+    }
 });
 
 document.querySelectorAll('[data-setting]').forEach(input => {
@@ -85,7 +248,7 @@ document.querySelectorAll('[data-setting]').forEach(input => {
         }
 
         if (key === 'timelineHeight') {
-            elTimelineScroll.style.height = Math.max(320, Number(state.timelineHeight) + 160) + 'px';
+            elTimelineScroll.style.height = '100%';
         }
         renderTimeline();
     });
@@ -110,7 +273,7 @@ document.getElementById('pdf-orientation').addEventListener('change', (e) => {
 
 document.getElementById('reset-settings').addEventListener('click', () => {
     Object.keys(defaultState).forEach(key => {
-        if (key === 'events' || key === 'periods') return;
+        if (key === 'events' || key === 'periods' || key === 'title') return;
         state[key] = defaultState[key];
         const input = document.querySelector(`[data-setting="${key}"]`);
         if (input) {
@@ -126,7 +289,7 @@ document.getElementById('reset-settings').addEventListener('click', () => {
             }
         }
     });
-    elTimelineScroll.style.height = Math.max(320, Number(state.timelineHeight) + 160) + 'px';
+    elTimelineScroll.style.height = '100%';
     renderTimeline();
 });
 
@@ -155,6 +318,273 @@ function toNumber(value, fallback) {
     const parsed = parseFloat(value);
     return Number.isFinite(parsed) ? parsed : fallback;
 }
+
+function stripCodeFences(value) {
+    return String(value || '')
+        .trim()
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/i, '');
+}
+
+function safeColor(value, fallback) {
+    return /^#[0-9a-f]{6}$/i.test(String(value || '')) ? value : fallback;
+}
+
+function suggestMainStep(start, end) {
+    const span = Math.max(end - start, 1);
+    const rough = span / 10;
+    const magnitude = 10 ** Math.floor(Math.log10(rough));
+    const normalized = rough / magnitude;
+    const nice = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+    return Math.max(Number((nice * magnitude).toPrecision(8)), 0.01);
+}
+
+const EVENT_PALETTE = [
+    { background: '#ffe7e2', accent: '#ff806f' },
+    { background: '#fff0cf', accent: '#e6a93f' },
+    { background: '#e7efff', accent: '#6e91e8' },
+    { background: '#f0e7ff', accent: '#9b78dd' }
+];
+
+const PERIOD_PALETTE = [
+    { background: '#dff8f5', accent: '#43c4b8' },
+    { background: '#e6efff', accent: '#6e91e8' },
+    { background: '#f0e7ff', accent: '#9b78dd' }
+];
+
+function normalizeEventInput(input = {}, index = 0) {
+    const palette = EVENT_PALETTE[index % EVENT_PALETTE.length];
+    const value = toNumber(input.value, state.start);
+    return {
+        id: input.id || createId('event'),
+        title: String(input.title || `Événement ${index + 1}`).trim(),
+        value,
+        font: input.font || 'DM Sans',
+        fontSize: Math.max(8, toNumber(input.fontSize, 14)),
+        width: Math.max(70, toNumber(input.width, 145)),
+        textColor: safeColor(input.textColor, '#111c44'),
+        backgroundColor: safeColor(input.backgroundColor, palette.background),
+        backgroundOpacity: Math.min(1, Math.max(0.05, toNumber(input.backgroundOpacity, 0.96))),
+        connectorColor: safeColor(input.connectorColor, palette.accent),
+        showDate: input.showDate !== false,
+        showTitle: input.showTitle !== false,
+        showDetail: input.showDetail !== false,
+        detail: String(input.detail || '').trim(),
+        image: typeof input.image === 'string' ? input.image : null,
+        imageWidth: Math.max(10, toNumber(input.imageWidth, 120)),
+        imageHeight: Math.max(10, toNumber(input.imageHeight, 90)),
+        offsetX: toNumber(input.offsetX, 0),
+        offsetY: toNumber(input.offsetY, [0, 160, 320][index % 3]),
+        visible: input.visible !== false
+    };
+}
+
+function normalizePeriodInput(input = {}, index = 0) {
+    const palette = PERIOD_PALETTE[index % PERIOD_PALETTE.length];
+    const startValue = toNumber(input.start, state.start);
+    const endValue = toNumber(input.end, state.end);
+    return {
+        id: input.id || createId('period'),
+        title: String(input.title || `Période ${index + 1}`).trim(),
+        start: Math.min(startValue, endValue),
+        end: Math.max(startValue, endValue),
+        style: input.style === 'line' ? 'line' : 'rect',
+        thickness: Math.max(1, toNumber(input.thickness, 2)),
+        rectHeight: Math.max(12, toNumber(input.rectHeight, 52)),
+        titleAlignment: ['top', 'middle', 'bottom'].includes(input.titleAlignment)
+            ? input.titleAlignment
+            : 'middle',
+        fillColor: safeColor(input.fillColor, palette.background),
+        fillOpacity: Math.min(1, Math.max(0.05, toNumber(input.fillOpacity, 0.75))),
+        textColor: safeColor(input.textColor, '#111c44'),
+        strokeColor: safeColor(input.strokeColor, palette.accent),
+        font: input.font || 'DM Sans',
+        fontSize: Math.max(8, toNumber(input.fontSize, 13)),
+        showDate: input.showDate !== false,
+        showTitle: input.showTitle !== false,
+        showDetail: input.showDetail !== false,
+        detail: String(input.detail || '').trim(),
+        image: typeof input.image === 'string' ? input.image : null,
+        imageWidth: Math.max(10, toNumber(input.imageWidth, 120)),
+        imageHeight: Math.max(10, toNumber(input.imageHeight, 80)),
+        offsetX: 0,
+        offsetY: toNumber(input.offsetY, (index % 3) * 64),
+        visible: input.visible !== false
+    };
+}
+
+function normalizeTimelinePayload(payload) {
+    const parsed = typeof payload === 'string' ? JSON.parse(stripCodeFences(payload)) : payload;
+    const source = parsed?.timeline && typeof parsed.timeline === 'object' ? parsed.timeline : parsed;
+    if (!source || typeof source !== 'object' || Array.isArray(source)) {
+        throw new Error('Le résultat doit être un objet JSON.');
+    }
+
+    const startValue = toNumber(source.start, defaultState.start);
+    const endValue = toNumber(source.end, defaultState.end);
+    if (endValue <= startValue) {
+        throw new Error('La valeur « end » doit être supérieure à « start ».');
+    }
+
+    if (!Array.isArray(source.events) || !Array.isArray(source.periods)) {
+        throw new Error('Les propriétés « events » et « periods » doivent être des tableaux.');
+    }
+
+    const normalized = JSON.parse(JSON.stringify(defaultState));
+    const safeConfigKeys = [
+        'secondaryPerMain', 'mmPerMain', 'mainTickHeight', 'secondaryTickHeight',
+        'backgroundColor', 'baselineColor', 'mainTickColor', 'secondaryTickColor',
+        'labelColor', 'labelSize', 'labelOffset', 'labelFont', 'showSecondaryLabels',
+        'secondaryLabelSize', 'secondaryLabelColor', 'secondaryLabelOffset',
+        'secondaryLabelFont', 'timelineHeight', 'padding', 'eventBaseOffset',
+        'periodBaseOffset', 'exportScale', 'orientation'
+    ];
+    safeConfigKeys.forEach(key => {
+        if (source[key] !== undefined) normalized[key] = source[key];
+    });
+
+    normalized.title = String(source.title || 'Ma frise chronologique').trim();
+    normalized.start = startValue;
+    normalized.end = endValue;
+    normalized.mainStep = Math.max(0.01, toNumber(source.mainStep, suggestMainStep(startValue, endValue)));
+    normalized.events = source.events.map((event, index) => normalizeEventInput(event, index));
+    normalized.periods = source.periods.map((period, index) => normalizePeriodInput(period, index));
+    if (source.timelineHeight === undefined) normalized.timelineHeight = 950;
+    if (source.eventBaseOffset === undefined) normalized.eventBaseOffset = 20;
+    if (source.periodBaseOffset === undefined) normalized.periodBaseOffset = -290;
+    normalized.orientation = source.orientation === 'portrait' ? 'portrait' : 'landscape';
+    return normalized;
+}
+
+function applyTimelinePayload(payload, { announce = true } = {}) {
+    const normalized = normalizeTimelinePayload(payload);
+    Object.assign(state, normalized);
+    editingEventId = null;
+    editingPeriodId = null;
+    eventForm.reset();
+    periodForm.reset();
+    eventSubmitBtn.textContent = 'Ajouter l’événement';
+    periodSubmitBtn.textContent = 'Ajouter la période';
+    syncSettingsControls();
+    renderTimeline();
+    focusTimelineContent();
+    if (announce) showToast('Frise importée avec succès.');
+    return JSON.parse(JSON.stringify(state));
+}
+
+function focusTimelineContent() {
+    window.requestAnimationFrame(() => {
+        elTimelineScroll.scrollTop = Math.max(
+            0,
+            Number(state.timelineHeight) / 2 - elTimelineScroll.clientHeight * 0.55
+        );
+    });
+}
+
+function buildAiPrompt(topic) {
+    const subject = String(topic || '').trim() || '[INDIQUEZ ICI LE THÈME]';
+    return `Tu es un historien-documentaliste et un concepteur de frises chronologiques.
+
+MISSION
+Crée une frise claire, fiable et synthétique sur le thème suivant :
+« ${subject} »
+
+FORMAT DE RÉPONSE OBLIGATOIRE
+Réponds UNIQUEMENT avec un objet JSON valide, sans Markdown, sans commentaire avant ou après, sans bloc \`\`\`.
+Utilise exactement cette structure :
+{
+  "title": "Titre court de la frise",
+  "start": 1950,
+  "end": 2030,
+  "mainStep": 10,
+  "events": [
+    {
+      "title": "Titre court",
+      "value": 1957,
+      "detail": "Une phrase factuelle et concise.",
+      "backgroundColor": "#FFE7E2",
+      "textColor": "#111C44",
+      "connectorColor": "#FF806F"
+    }
+  ],
+  "periods": [
+    {
+      "title": "Nom de la période",
+      "start": 1950,
+      "end": 1969,
+      "detail": "Une phrase qui explique cette phase.",
+      "fillColor": "#DFF8F5",
+      "strokeColor": "#43C4B8",
+      "textColor": "#111C44"
+    }
+  ]
+}
+
+RÈGLES ÉDITORIALES
+- Crée entre 8 et 14 événements vraiment structurants, classés chronologiquement.
+- Crée entre 2 et 5 périodes cohérentes qui aident à comprendre les grandes phases.
+- Utilise uniquement des nombres pour start, end, mainStep, value et les bornes des périodes. Pour une date avant notre ère, utilise un nombre négatif.
+- Choisis start et end avec une petite marge autour du premier et du dernier événement.
+- Choisis un mainStep lisible : 1, 2, 5, 10, 20, 50, 100, etc. selon l’échelle du sujet.
+- Les titres doivent être courts. Les détails doivent tenir en une phrase utile.
+- N’invente pas de fait incertain. Si la chronologie exacte est débattue, reste sobre et signale l’incertitude dans detail.
+- Répartis les couleurs entre ces pastels : événements #FFE7E2, #FFF0CF, #E7EFFF, #F0E7FF ; périodes #DFF8F5, #E6EFFF, #F0E7FF.
+- Ne fournis aucune image, aucun HTML et aucune propriété supplémentaire inutile.
+
+MODE D’EMPLOI DE L’APPLICATION
+- Dans un chat classique : renvoie seulement le JSON. L’utilisateur ouvrira « Assistant IA » dans l’application, collera le résultat à l’étape 3 puis cliquera sur « Créer la frise ».
+- Si tu contrôles directement le navigateur : consulte d’abord window.timelineAgent.describe(), appelle window.timelineAgent.importState(objetJSON), puis vérifie le résultat avec window.timelineAgent.getState().
+- L’application normalise les valeurs manquantes et expose aussi addEvent(), addPeriod() et clear().
+
+VÉRIFICATION AVANT RÉPONSE
+Vérifie que le JSON est syntaxiquement valide, que end > start, que chaque événement est dans la plage, que chaque période a end >= start et que la chronologie raconte un récit compréhensible.`;
+}
+
+function updateAiPrompt() {
+    if (elAiPrompt) elAiPrompt.value = buildAiPrompt(elAiTopic?.value);
+}
+
+async function copyText(text) {
+    if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+    }
+    const helper = document.createElement('textarea');
+    helper.value = text;
+    helper.style.position = 'fixed';
+    helper.style.opacity = '0';
+    document.body.appendChild(helper);
+    helper.select();
+    document.execCommand('copy');
+    helper.remove();
+}
+
+elAiTopic?.addEventListener('input', updateAiPrompt);
+document.getElementById('copy-ai-prompt')?.addEventListener('click', async () => {
+    const button = document.getElementById('copy-ai-prompt');
+    try {
+        await copyText(elAiPrompt.value);
+        button.dataset.copyState = 'success';
+        showToast('Prompt copié. Vous pouvez le coller dans votre IA.');
+    } catch (error) {
+        button.dataset.copyState = 'error';
+        showToast('La copie automatique a échoué. Sélectionnez le prompt manuellement.', 'error');
+    }
+});
+
+document.getElementById('import-ai-json')?.addEventListener('click', () => {
+    elAiImportStatus.className = '';
+    try {
+        applyTimelinePayload(elAiJsonInput.value);
+        elAiImportStatus.textContent = `${state.events.length} événements et ${state.periods.length} périodes importés.`;
+        elAiImportStatus.classList.add('is-success');
+        setMobileView('canvas');
+        window.setTimeout(() => toggleAiModal(false), 450);
+    } catch (error) {
+        elAiImportStatus.textContent = error.message || 'Le JSON n’est pas valide.';
+        elAiImportStatus.classList.add('is-error');
+    }
+});
 
 function readEventFormPayload(form, target = {}, imageData = undefined) {
     const image = imageData === undefined ? target.image || null : imageData || target.image || null;
@@ -291,7 +721,7 @@ eventForm.addEventListener('submit', async (e) => {
         editingEventId = null;
         eventSubmitBtn.textContent = "Ajouter l'événement";
     } else {
-        state.events.push({ id: crypto.randomUUID(), ...payload });
+        state.events.push({ id: createId('event'), ...payload });
     }
     e.target.reset();
     renderTimeline();
@@ -311,7 +741,7 @@ periodForm.addEventListener('submit', async (e) => {
         editingPeriodId = null;
         periodSubmitBtn.textContent = "Ajouter la période";
     } else {
-        state.periods.push({ id: crypto.randomUUID(), ...payload });
+        state.periods.push({ id: createId('period'), ...payload });
     }
     e.target.reset();
     renderTimeline();
@@ -503,7 +933,7 @@ function renderEvents() {
 
         if (evt.detail && evt.showDetail !== false) {
             const detail = document.createElement('div');
-            detail.className = 'date';
+            detail.className = 'date event-detail';
             detail.style.marginTop = '4px';
             detail.textContent = evt.detail;
             detail.style.fontSize = `${evt.fontSize * 0.9}px`;
@@ -780,6 +1210,13 @@ function attachDrag() {
 
 function renderList(container, items, type) {
     container.innerHTML = '';
+    const icons = {
+        visible: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/><circle cx="12" cy="12" r="2.6"/></svg>',
+        hidden: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 3l18 18M10.5 6.2A9.7 9.7 0 0 1 12 6c6 0 9.5 6 9.5 6a15.3 15.3 0 0 1-2.2 2.8M6.2 6.2C3.8 8 2.5 12 2.5 12s3.5 6 9.5 6c1.5 0 2.8-.4 4-1"/></svg>',
+        edit: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 20l4.2-1 10.6-10.6-3.2-3.2L5 15.8zM13.9 6.9l3.2 3.2"/></svg>',
+        delete: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg>'
+    };
+
     items.forEach(item => {
         const pill = document.createElement('div');
         pill.className = 'pill';
@@ -792,8 +1229,10 @@ function renderList(container, items, type) {
         pill.appendChild(label);
 
         const toggle = document.createElement('button');
-        toggle.textContent = item.visible === false ? '⚪' : '⚫';
-        toggle.title = 'Afficher / masquer';
+        toggle.type = 'button';
+        toggle.innerHTML = item.visible === false ? icons.hidden : icons.visible;
+        toggle.title = item.visible === false ? 'Afficher' : 'Masquer';
+        toggle.setAttribute('aria-label', `${toggle.title} ${item.title}`);
         toggle.addEventListener('click', () => {
             item.visible = !item.visible;
             renderTimeline();
@@ -801,16 +1240,20 @@ function renderList(container, items, type) {
         pill.appendChild(toggle);
 
         const edit = document.createElement('button');
-        edit.textContent = '✏️';
+        edit.type = 'button';
+        edit.innerHTML = icons.edit;
         edit.title = 'Modifier';
+        edit.setAttribute('aria-label', `Modifier ${item.title}`);
         edit.addEventListener('click', () => {
             startEditing(type, item.id);
         });
         pill.appendChild(edit);
 
         const del = document.createElement('button');
-        del.textContent = '×';
+        del.type = 'button';
+        del.innerHTML = icons.delete;
         del.title = 'Supprimer';
+        del.setAttribute('aria-label', `Supprimer ${item.title}`);
         del.addEventListener('click', () => {
             if (type === 'event') {
                 state.events = state.events.filter(ev => ev.id !== item.id);
@@ -837,6 +1280,7 @@ function renderList(container, items, type) {
 
 function renderTimeline() {
     if (state.end <= state.start) state.end = state.start + 1;
+    const totalItems = state.events.length + state.periods.length;
     elTimeline.innerHTML = '';
     elTimeline.style.background = state.backgroundColor;
     elTimeline.style.height = `${state.timelineHeight}px`;
@@ -849,6 +1293,28 @@ function renderTimeline() {
     attachDrag();
     renderList(elEventList, state.events, 'event');
     renderList(elPeriodList, state.periods, 'period');
+
+    if (document.activeElement !== elCanvasTitle) {
+        elCanvasTitle.textContent = state.title || 'Ma frise chronologique';
+    }
+    elTimelineMeta.textContent = `${totalItems} élément${totalItems > 1 ? 's' : ''} · ${state.start}–${state.end}`;
+    elEmptyState.hidden = totalItems > 0;
+
+    document.getElementById('event-count').textContent = state.events.length;
+    document.getElementById('period-count').textContent = state.periods.length;
+    document.getElementById('event-list-count').textContent = state.events.length;
+    document.getElementById('period-list-count').textContent = state.periods.length;
+    document.getElementById('event-list-empty').hidden = state.events.length > 0;
+    document.getElementById('period-list-empty').hidden = state.periods.length > 0;
+
+    persistDraft();
+    window.dispatchEvent(new CustomEvent('timeline:statechange', {
+        detail: {
+            version: '1.0',
+            eventCount: state.events.length,
+            periodCount: state.periods.length
+        }
+    }));
 }
 
 async function ensureLibs() {
@@ -880,6 +1346,10 @@ async function exportCanvas() {
 }
 
 document.getElementById('save-image').addEventListener('click', async () => {
+    const button = document.getElementById('save-image');
+    button.disabled = true;
+    button.dataset.exportState = 'working';
+    delete button.dataset.exportError;
     elTimeline.classList.add('exporting');
     try {
         const canvas = await exportCanvas();
@@ -887,12 +1357,23 @@ document.getElementById('save-image').addEventListener('click', async () => {
         link.download = 'frise.png';
         link.href = canvas.toDataURL('image/png');
         link.click();
+        button.dataset.exportState = 'success';
+        showToast('Export PNG généré.');
+    } catch (error) {
+        button.dataset.exportState = 'error';
+        button.dataset.exportError = String(error?.message || error).slice(0, 180);
+        showToast('L’export PNG a échoué. Vérifiez votre connexion puis réessayez.', 'error');
     } finally {
+        button.disabled = false;
         elTimeline.classList.remove('exporting');
     }
 });
 
 document.getElementById('export-pdf').addEventListener('click', async () => {
+    const button = document.getElementById('export-pdf');
+    button.disabled = true;
+    button.dataset.exportState = 'working';
+    delete button.dataset.exportError;
     elTimeline.classList.add('exporting');
     try {
         const canvas = await exportCanvas();
@@ -983,12 +1464,21 @@ document.getElementById('export-pdf').addEventListener('click', async () => {
             }
         }
         pdf.save('frise.pdf');
+        button.dataset.exportState = 'success';
+        showToast('Export PDF généré.');
+    } catch (error) {
+        button.dataset.exportState = 'error';
+        button.dataset.exportError = String(error?.message || error).slice(0, 180);
+        showToast('L’export PDF a échoué. Vérifiez votre connexion puis réessayez.', 'error');
     } finally {
+        button.disabled = false;
         elTimeline.classList.remove('exporting');
     }
 });
 
 document.getElementById('export-html').addEventListener('click', () => {
+    const button = document.getElementById('export-html');
+    button.dataset.exportState = 'working';
     // Clone the timeline to make a static version
     const clone = elTimeline.cloneNode(true);
 
@@ -1043,6 +1533,8 @@ document.getElementById('export-html').addEventListener('click', () => {
     a.download = 'frise_export.html';
     a.click();
     URL.revokeObjectURL(url);
+    button.dataset.exportState = 'success';
+    showToast('Export HTML généré.');
 });
 
 document.getElementById('save-state').addEventListener('click', () => {
@@ -1054,6 +1546,7 @@ document.getElementById('save-state').addEventListener('click', () => {
     a.download = 'frise.json';
     a.click();
     URL.revokeObjectURL(url);
+    showToast('Frise enregistrée au format JSON.');
 });
 
 document.getElementById('load-input').addEventListener('change', (e) => {
@@ -1062,43 +1555,113 @@ document.getElementById('load-input').addEventListener('change', (e) => {
     const reader = new FileReader();
     reader.onload = () => {
         try {
-            const data = JSON.parse(reader.result);
-            Object.assign(state, defaultState, data);
-            state.events = (data.events || []).map(ev => ({
-                visible: true,
-                offsetX: 0,
-                offsetY: 0,
-                showTitle: true,
-                showDetail: true,
-                imageWidth: 120,
-                imageHeight: 90,
-                ...ev
-            }));
-            state.periods = (data.periods || []).map(pe => ({
-                visible: true,
-                offsetX: 0,
-                offsetY: 0,
-                showTitle: true,
-                showDetail: true,
-                imageWidth: 120,
-                imageHeight: 80,
-                ...pe
-            }));
-            document.querySelectorAll('[data-setting]').forEach(input => {
-                const key = input.dataset.setting;
-                if (state[key] === undefined) return;
-                if (input.type === 'checkbox') input.checked = Boolean(state[key]);
-                else input.value = state[key];
-            });
-            document.getElementById('pdf-orientation').value = state.orientation;
-            elTimelineScroll.style.height = Math.max(320, Number(state.timelineHeight) + 160) + 'px';
-            renderTimeline();
+            applyTimelinePayload(reader.result);
         } catch (err) {
-            alert('Impossible de charger ce fichier.');
+            showToast(err.message || 'Impossible de charger ce fichier.', 'error');
         }
     };
     reader.readAsText(file);
     e.target.value = '';
 });
 
+document.getElementById('new-timeline').addEventListener('click', () => {
+    if ((state.events.length || state.periods.length)
+        && !window.confirm('Créer une nouvelle frise ? Votre brouillon actuel sera remplacé.')) {
+        return;
+    }
+
+    Object.assign(state, JSON.parse(JSON.stringify(defaultState)));
+    editingEventId = null;
+    editingPeriodId = null;
+    eventForm.reset();
+    periodForm.reset();
+    eventSubmitBtn.textContent = 'Ajouter l’événement';
+    periodSubmitBtn.textContent = 'Ajouter la période';
+    syncSettingsControls();
+    renderTimeline();
+    setMobileView('canvas');
+    showToast('Nouvelle frise prête.');
+});
+
+function restoreDraft() {
+    try {
+        const draft = localStorage.getItem(DRAFT_STORAGE_KEY);
+        if (!draft) return false;
+        Object.assign(state, normalizeTimelinePayload(draft));
+        return true;
+    } catch (error) {
+        localStorage.removeItem(DRAFT_STORAGE_KEY);
+        return false;
+    }
+}
+
+function getAgentDescriptor() {
+    let schema = null;
+    try {
+        schema = JSON.parse(document.getElementById('timeline-agent-schema').textContent);
+    } catch (error) {
+        schema = null;
+    }
+    return {
+        name: 'Frise chronologique',
+        version: '1.0',
+        language: 'fr',
+        description: 'Éditeur visuel de frises chronologiques pilotable par données structurées.',
+        preferredFlow: [
+            'Call describe() to inspect this contract.',
+            'Build a valid payload with events and periods.',
+            'Call importState(payload).',
+            'Call getState() to verify the imported result.'
+        ],
+        methods: {
+            describe: 'Returns this descriptor and the JSON Schema.',
+            getState: 'Returns a deep copy of the current timeline.',
+            importState: 'Validates, normalizes and replaces the current timeline.',
+            addEvent: 'Adds one event and returns it.',
+            addPeriod: 'Adds one period and returns it.',
+            clear: 'Clears events and periods.',
+            getPrompt: 'Returns the ready-to-copy prompt for a topic.'
+        },
+        events: {
+            stateChange: 'window event timeline:statechange'
+        },
+        schema
+    };
+}
+
+window.timelineAgent = Object.freeze({
+    version: '1.0',
+    describe: () => getAgentDescriptor(),
+    getState: () => JSON.parse(JSON.stringify(state)),
+    importState: payload => applyTimelinePayload(payload),
+    addEvent: payload => {
+        const event = normalizeEventInput(payload, state.events.length);
+        state.events.push(event);
+        renderTimeline();
+        return JSON.parse(JSON.stringify(event));
+    },
+    addPeriod: payload => {
+        const period = normalizePeriodInput(payload, state.periods.length);
+        state.periods.push(period);
+        renderTimeline();
+        return JSON.parse(JSON.stringify(period));
+    },
+    clear: () => {
+        state.events = [];
+        state.periods = [];
+        editingEventId = null;
+        editingPeriodId = null;
+        renderTimeline();
+        return window.timelineAgent.getState();
+    },
+    getPrompt: topic => buildAiPrompt(topic)
+});
+document.documentElement.dataset.timelineAgentApi = window.timelineAgent.version;
+
+restoreDraft();
+syncSettingsControls();
+updateAiPrompt();
+setEditorTab('event');
+setMobileView('canvas');
 renderTimeline();
+if (state.events.length || state.periods.length) focusTimelineContent();
