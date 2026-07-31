@@ -14,7 +14,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Playfair+Display:wght@500&family=Roboto:wght@400;500&family=Poppins:wght@400;500&family=Montserrat:wght@500;600&family=Lora:wght@500&family=Manrope:wght@500;600&family=Open+Sans:wght@400;600&family=Lato:wght@400;700&family=Oswald:wght@500&display=swap"
     rel="stylesheet">
   <link rel="alternate" type="application/json" href="agent-manifest.json" title="Contrat pour agents IA">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=1.2">
 </head>
 
 <body data-mobile-view="canvas">
@@ -138,8 +138,9 @@
               <input name="title" type="text" placeholder="Ex. Premier vol de Spoutnik 1" required
                 autocomplete="off">
             </label>
-            <label class="span-2">Date ou valeur
-              <input name="value" type="number" step="0.1" placeholder="1957" required inputmode="decimal">
+            <label class="span-2">Date ou année
+              <input name="value" type="text" placeholder="Ex. 28.06.1914 ou 1914" required
+                inputmode="decimal" autocomplete="off">
             </label>
             <label>Couleur du fond
               <input name="backgroundColor" type="color" value="#ffe7e2">
@@ -232,10 +233,12 @@
                 autocomplete="off">
             </label>
             <label>Début
-              <input name="start" type="number" step="0.1" placeholder="1957" required inputmode="decimal">
+              <input name="start" type="text" placeholder="28.07.1914" required inputmode="decimal"
+                autocomplete="off">
             </label>
             <label>Fin
-              <input name="end" type="number" step="0.1" placeholder="1969" required inputmode="decimal">
+              <input name="end" type="text" placeholder="11.11.1918" required inputmode="decimal"
+                autocomplete="off">
             </label>
             <label>Couleur du fond
               <input name="fillColor" type="color" value="#dff8f5">
@@ -344,6 +347,32 @@
             spellcheck="true">Ma frise chronologique</h1>
         </div>
         <div class="canvas-header-actions">
+          <div class="history-controls" role="group" aria-label="Historique des modifications">
+            <button class="button button-quiet button-square" id="undo-action" type="button"
+              aria-label="Annuler" title="Annuler (⌘Z)" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M9 7L4 12l5 5M5 12h8a6 6 0 0 1 6 6" />
+              </svg>
+            </button>
+            <button class="button button-quiet button-square" id="redo-action" type="button"
+              aria-label="Rétablir" title="Rétablir (⇧⌘Z)" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M15 7l5 5-5 5M19 12h-8a6 6 0 0 0-6 6" />
+              </svg>
+            </button>
+          </div>
+          <div class="zoom-controls" role="group" aria-label="Zoom de la frise">
+            <button class="button button-quiet button-square" id="zoom-out" type="button"
+              aria-label="Dézoomer" title="Dézoomer">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 12h12" /></svg>
+            </button>
+            <button class="zoom-value" id="zoom-reset" type="button" title="Réinitialiser le zoom"
+              aria-label="Réinitialiser le zoom à 100 %">100%</button>
+            <button class="button button-quiet button-square" id="zoom-in" type="button"
+              aria-label="Zoomer" title="Zoomer">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 6v12M6 12h12" /></svg>
+            </button>
+          </div>
           <span class="autosave-status" id="autosave-status">
             <span aria-hidden="true"></span>
             Enregistré localement
@@ -632,10 +661,16 @@
         <section class="ai-section">
           <div class="ai-section-number">2</div>
           <div class="ai-section-content">
+            <div class="prompt-mode-switch" role="tablist" aria-label="Type de prompt">
+              <button class="is-active" type="button" role="tab" aria-selected="true"
+                data-ai-prompt-mode="chatbot">Pour un chatbot</button>
+              <button type="button" role="tab" aria-selected="false"
+                data-ai-prompt-mode="agent">Pour un agent autonome</button>
+            </div>
             <div class="ai-section-heading">
               <div>
-                <h3>Copiez le prompt dans ChatGPT ou une autre IA</h3>
-                <p>Le prompt contient le schéma, les règles éditoriales et le mode d’emploi pour un agent.</p>
+                <h3 id="ai-prompt-heading">Prompt pour ChatGPT ou un chatbot</h3>
+                <p id="ai-prompt-description">Le chatbot prépare un JSON que vous pourrez importer à l’étape 3.</p>
               </div>
               <button class="button button-primary copy-button" id="copy-ai-prompt" type="button"
                 data-agent-action="copy-prompt">
@@ -672,9 +707,8 @@
 
       <details class="agent-details">
         <summary>Accès direct pour un agent navigateur</summary>
-        <p>Une API stable est disponible dans la page via <code>window.timelineAgent</code>. Utilisez
-          <code>describe()</code> pour lire le contrat, <code>importState(data)</code> pour créer une frise et
-          <code>getState()</code> pour vérifier le résultat.</p>
+        <p>Choisissez « Pour un agent autonome » afin d’obtenir une procédure complète. L’agent peut utiliser
+          <code>window.timelineAgent</code> ou les sélecteurs DOM documentés si son navigateur isole les scripts.</p>
       </details>
     </div>
   </div>
@@ -696,11 +730,18 @@
         "type": "array",
         "items": {
           "type": "object",
-          "required": ["title", "value"],
+          "required": ["title"],
+          "anyOf": [
+            { "required": ["date"] },
+            { "required": ["value"] }
+          ],
           "properties": {
             "title": { "type": "string" },
             "value": { "type": "number" },
+            "date": { "type": "string", "pattern": "^-?[0-9]{1,6}-[0-9]{2}-[0-9]{2}$" },
             "detail": { "type": "string" },
+            "width": { "type": "number", "minimum": 70, "maximum": 360 },
+            "autoWidth": { "type": "boolean" },
             "image": { "type": ["string", "null"], "format": "uri" },
             "imageAlt": { "type": ["string", "null"] },
             "imageSourceUrl": { "type": ["string", "null"], "format": "uri" },
@@ -715,11 +756,17 @@
         "type": "array",
         "items": {
           "type": "object",
-          "required": ["title", "start", "end"],
+          "required": ["title"],
+          "anyOf": [
+            { "required": ["startDate", "endDate"] },
+            { "required": ["start", "end"] }
+          ],
           "properties": {
             "title": { "type": "string" },
             "start": { "type": "number" },
             "end": { "type": "number" },
+            "startDate": { "type": "string", "pattern": "^-?[0-9]{1,6}-[0-9]{2}-[0-9]{2}$" },
+            "endDate": { "type": "string", "pattern": "^-?[0-9]{1,6}-[0-9]{2}-[0-9]{2}$" },
             "detail": { "type": "string" },
             "image": { "type": ["string", "null"], "format": "uri" },
             "imageAlt": { "type": ["string", "null"] },
@@ -734,7 +781,7 @@
     }
   }
   </script>
-  <script src="script.js"></script>
+  <script src="script.js?v=1.2"></script>
 </body>
 
 </html>
