@@ -21,6 +21,7 @@ const state = {
     labelSize: 12,
     labelOffset: 6,
     labelFont: 'DM Sans',
+    dateFormat: 'numeric',
     showSecondaryLabels: false,
     secondaryLabelSize: 10,
     secondaryLabelColor: '#6b7a90',
@@ -243,6 +244,18 @@ function setTimelineZoom(value, { preserveCenter = true, announce = false } = {}
     }
     if (announce) showToast(`Zoom réglé à ${Math.round(timelineZoom * 100)} %.`);
     return timelineZoom;
+}
+
+function setDateFormat(format, { announce = false } = {}) {
+    state.dateFormat = format === 'long' ? 'long' : 'numeric';
+    syncSettingsControls();
+    renderTimeline();
+    if (announce) {
+        showToast(state.dateFormat === 'long'
+            ? 'Dates affichées en toutes lettres.'
+            : 'Dates affichées au format numérique.');
+    }
+    return state.dateFormat;
 }
 
 function restoreTimelineZoom() {
@@ -486,6 +499,21 @@ function formatCalendarYear(year) {
     return year < 0 ? `${Math.abs(year)} av. J.-C.` : String(year).padStart(4, '0');
 }
 
+const FRENCH_MONTHS = [
+    'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+    'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'
+];
+
+function formatCalendarParts(parts, format = state.dateFormat) {
+    if (!parts) return '';
+    const day = format === 'long' ? String(parts.day) : String(parts.day).padStart(2, '0');
+    const month = format === 'long'
+        ? FRENCH_MONTHS[parts.month - 1]
+        : String(parts.month).padStart(2, '0');
+    const separator = format === 'long' ? ' ' : '.';
+    return `${day}${separator}${month}${separator}${formatCalendarYear(parts.year)}`;
+}
+
 function parseCalendarDate(value) {
     const raw = String(value ?? '').trim();
     if (!raw) return null;
@@ -520,7 +548,7 @@ function parseCalendarDate(value) {
         day,
         value: decimalValue,
         iso: `${yearIso}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
-        label: `${String(day).padStart(2, '0')}.${String(month).padStart(2, '0')}.${formatCalendarYear(year)}`
+        label: formatCalendarParts({ year, month, day }, 'numeric')
     };
 }
 
@@ -541,7 +569,7 @@ function decimalYearToCalendar(value) {
         year,
         month,
         day,
-        label: `${String(day).padStart(2, '0')}.${String(month).padStart(2, '0')}.${formatCalendarYear(year)}`
+        label: formatCalendarParts({ year, month, day }, 'numeric')
     };
 }
 
@@ -557,9 +585,17 @@ function parseTimelineCoordinate(rawValue, fallback, explicitDate = null) {
 
 function formatTimelineValue(value, exactDate = null) {
     const parsedDate = parseCalendarDate(exactDate);
-    if (parsedDate) return parsedDate.label;
+    if (parsedDate) return formatCalendarParts(parsedDate);
     const inferredDate = decimalYearToCalendar(value);
-    if (inferredDate) return inferredDate.label;
+    if (inferredDate) return formatCalendarParts(inferredDate);
+    return String(Number.isFinite(Number(value)) ? Number(value) : value);
+}
+
+function formatEditableTimelineValue(value, exactDate = null) {
+    const parsedDate = parseCalendarDate(exactDate);
+    if (parsedDate) return formatCalendarParts(parsedDate, 'numeric');
+    const inferredDate = decimalYearToCalendar(value);
+    if (inferredDate) return formatCalendarParts(inferredDate, 'numeric');
     return String(Number.isFinite(Number(value)) ? Number(value) : value);
 }
 
@@ -620,6 +656,11 @@ function normalizeEventInput(input = {}, index = 0) {
     const position = parseTimelineCoordinate(input.value, state.start, input.date);
     const hasExplicitWidth = Number.isFinite(Number(input.width));
     const autoWidth = input.autoWidth === true || !hasExplicitWidth;
+    const hasExplicitHeight = input.height !== null
+        && input.height !== undefined
+        && input.height !== ''
+        && Number.isFinite(Number(input.height));
+    const explicitHeight = hasExplicitHeight ? Number(input.height) : null;
     return {
         id: input.id || createId('event'),
         title: String(input.title || `Événement ${index + 1}`).trim(),
@@ -629,7 +670,10 @@ function normalizeEventInput(input = {}, index = 0) {
         fontSize: Math.max(8, toNumber(input.fontSize, 14)),
         width: autoWidth
             ? eventSuggestedWidth(input)
-            : Math.min(360, Math.max(70, toNumber(input.width, 145))),
+            : Math.min(480, Math.max(120, toNumber(input.width, 145))),
+        height: hasExplicitHeight
+            ? Math.min(720, Math.max(72, explicitHeight))
+            : null,
         autoWidth,
         textColor: safeColor(input.textColor, '#111c44'),
         backgroundColor: safeColor(input.backgroundColor, palette.background),
@@ -797,7 +841,7 @@ function normalizeTimelinePayload(payload, { adaptiveEventWidth = false } = {}) 
     const safeConfigKeys = [
         'secondaryPerMain', 'mmPerMain', 'mainTickHeight', 'secondaryTickHeight',
         'backgroundColor', 'baselineColor', 'mainTickColor', 'secondaryTickColor',
-        'labelColor', 'labelSize', 'labelOffset', 'labelFont', 'showSecondaryLabels',
+        'labelColor', 'labelSize', 'labelOffset', 'labelFont', 'dateFormat', 'showSecondaryLabels',
         'secondaryLabelSize', 'secondaryLabelColor', 'secondaryLabelOffset',
         'secondaryLabelFont', 'timelineHeight', 'padding', 'eventBaseOffset',
         'periodBaseOffset', 'exportScale', 'orientation'
@@ -809,6 +853,11 @@ function normalizeTimelinePayload(payload, { adaptiveEventWidth = false } = {}) 
     normalized.title = String(source.title || 'Ma frise chronologique').trim();
     normalized.start = startValue;
     normalized.end = endValue;
+    normalized.dateFormat = source.dateFormat === 'long'
+        ? 'long'
+        : source.dateFormat === 'numeric'
+            ? 'numeric'
+            : (state.dateFormat || defaultState.dateFormat);
     normalized.mainStep = Math.max(0.01, toNumber(source.mainStep, suggestMainStep(startValue, endValue)));
     normalized.events = source.events.map((event, index) => normalizeEventInput(
         adaptiveEventWidth ? { ...event, autoWidth: true } : event,
@@ -925,7 +974,7 @@ ${example}
 RÈGLES DE CONTENU ET DE DATES
 - Crée exactement ${eventCount} événements structurants, classés chronologiquement.
 - Crée exactement ${periodCount} périodes cohérentes${periodCount === 0 ? ' ; periods doit donc être un tableau vide' : ''}.
-- Pour une date connue au jour près, utilise obligatoirement date au format ISO AAAA-MM-JJ, par exemple "1914-06-28". L’application l’affichera sous la forme 28.06.1914.
+- Pour une date connue au jour près, utilise obligatoirement date au format ISO AAAA-MM-JJ, par exemple "1914-06-28". L’application l’affichera selon le choix de l’utilisateur : 28.06.1914 ou 28 juin 1914.
 - Pour une période connue au jour près, utilise startDate et endDate au format ISO AAAA-MM-JJ.
 - Si seule l’année est historiquement connue, utilise value avec une année entière pour un événement, ou start et end avec des années entières pour une période. N’invente jamais un jour ou un mois.
 - N’utilise jamais de fraction d’année comme 1914.49 pour représenter une date.
@@ -968,7 +1017,7 @@ PROCÉDURE AUTONOME OBLIGATOIRE
 3. Méthode préférée : appelle window.timelineAgent.importState(payload), puis window.timelineAgent.getState().
 4. Si le navigateur isole les scripts et masque window.timelineAgent, utilise le chemin DOM : clique [data-agent-action="open-ai-assistant"], remplis #ai-json-input avec le JSON, puis clique [data-agent-action="import-ai-json"].
 5. Vérifie que #timeline-space expose data-event-count="${eventCount}" et data-period-count="${periodCount}", ou vérifie les longueurs renvoyées par getState().
-6. Contrôle le rendu : les dates précises doivent apparaître en JJ.MM.AAAA, les textes des cartes doivent être entièrement visibles et deux rectangles .event ne doivent pas se recouvrir.
+6. Contrôle le rendu : les dates précises doivent respecter le format choisi dans les paramètres, les textes des cartes doivent être entièrement visibles et deux rectangles .event ne doivent pas se recouvrir.
 7. Si un contrôle échoue, corrige le payload et réimporte-le. Termine uniquement lorsque la frise est visible et conforme.
 8. Dans ta réponse finale, indique brièvement que la frise a été créée, le nombre d’éléments et les éventuelles sources d’images utilisées.`;
     }
@@ -1065,7 +1114,13 @@ function readEventFormPayload(form, target = {}, imageData = undefined) {
         date: position.date,
         font: form.font.value,
         fontSize: toNumber(form.fontSize.value, target.fontSize ?? 14),
-        width: toNumber(form.width.value, target.width ?? 120),
+        width: Math.min(480, Math.max(120, toNumber(form.width.value, target.width ?? 120))),
+        height: target.height !== null
+            && target.height !== undefined
+            && target.height !== ''
+            && Number.isFinite(Number(target.height))
+            ? Number(target.height)
+            : null,
         autoWidth: false,
         textColor: form.textColor.value,
         backgroundColor: form.backgroundColor.value,
@@ -1121,7 +1176,7 @@ function readPeriodFormPayload(form, target = {}, imageData = undefined) {
 function fillEventForm(item) {
     eventForm.title.value = item.title;
     eventForm.value.value = item.date
-        ? formatTimelineValue(item.value, item.date)
+        ? formatEditableTimelineValue(item.value, item.date)
         : String(item.value);
     eventForm.font.value = item.font;
     eventForm.fontSize.value = item.fontSize;
@@ -1142,10 +1197,10 @@ function fillEventForm(item) {
 function fillPeriodForm(item) {
     periodForm.title.value = item.title;
     periodForm.start.value = item.startDate
-        ? formatTimelineValue(item.start, item.startDate)
+        ? formatEditableTimelineValue(item.start, item.startDate)
         : String(item.start);
     periodForm.end.value = item.endDate
-        ? formatTimelineValue(item.end, item.endDate)
+        ? formatEditableTimelineValue(item.end, item.endDate)
         : String(item.end);
     periodForm.style.value = item.style;
     periodForm.fillOpacity.value = item.fillOpacity ?? 0.45;
@@ -1402,8 +1457,16 @@ function renderEvents() {
         card.style.fontFamily = evt.font;
         card.style.color = evt.textColor;
         card.style.width = `${evt.width || 120}px`;
+        const hasCustomHeight = evt.height !== null
+            && evt.height !== undefined
+            && evt.height !== ''
+            && Number.isFinite(Number(evt.height));
+        if (hasCustomHeight) {
+            card.style.height = `${evt.height}px`;
+        }
         card.style.borderColor = evt.connectorColor || '#0f172a';
         card.style.setProperty('--event-accent', evt.connectorColor || '#0f172a');
+        card.dataset.resizeMode = 'corners';
 
         if (evt.showTitle !== false) {
             const title = document.createElement('div');
@@ -1432,6 +1495,11 @@ function renderEvents() {
         appendItemImage(card, evt, evt.imageWidth || evt.width || 120, evt.imageHeight || 90);
 
         elTimeline.appendChild(card);
+        if (hasCustomHeight) {
+            const borderHeight = card.offsetHeight - card.clientHeight;
+            const safeHeight = Math.max(Number(evt.height), card.scrollHeight + borderHeight);
+            card.style.height = `${safeHeight}px`;
+        }
 
         const centerX = valueToX(evt.value) + (evt.offsetX || 0);
         const topY = baseY + (evt.offsetY || 0);
@@ -1441,6 +1509,7 @@ function renderEvents() {
         const baselineY = Number(state.timelineHeight) / 2;
         const yStart = (topY + card.offsetHeight / 2) < baselineY ? (topY + card.offsetHeight) : topY;
         lines.push({
+            id: evt.id,
             x1: centerX,
             y1: yStart,
             x2: valueToX(evt.value),
@@ -1653,6 +1722,7 @@ function renderConnectors(lines) {
     svg.classList.add('connector-layer');
     lines.forEach(line => {
         const el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        el.dataset.eventId = line.id;
         el.setAttribute('x1', line.x1);
         el.setAttribute('y1', line.y1);
         el.setAttribute('x2', line.x2);
@@ -1663,13 +1733,60 @@ function renderConnectors(lines) {
     elTimeline.appendChild(svg);
 }
 
+function eventResizeCorner(pointerEvent, element) {
+    const rect = element.getBoundingClientRect();
+    const zone = pointerEvent.pointerType === 'touch' ? 24 : 14;
+    const x = pointerEvent.clientX - rect.left;
+    const y = pointerEvent.clientY - rect.top;
+    const horizontal = x <= zone ? 'left' : x >= rect.width - zone ? 'right' : null;
+    const vertical = y <= zone ? 'top' : y >= rect.height - zone ? 'bottom' : null;
+    return horizontal && vertical ? `${vertical}-${horizontal}` : null;
+}
+
+function resizeCursor(corner) {
+    return corner === 'top-left' || corner === 'bottom-right' ? 'nwse-resize' : 'nesw-resize';
+}
+
+function updateEventConnectorPreview(card, id) {
+    const line = Array.from(elTimeline.querySelectorAll('.connector-layer line'))
+        .find(candidate => candidate.dataset.eventId === id);
+    const target = state.events.find(event => event.id === id);
+    if (!line || !target) return;
+    const cardRect = card.getBoundingClientRect();
+    const timelineRect = elTimeline.getBoundingClientRect();
+    const left = (cardRect.left - timelineRect.left) / timelineZoom;
+    const top = (cardRect.top - timelineRect.top) / timelineZoom;
+    const width = cardRect.width / timelineZoom;
+    const height = cardRect.height / timelineZoom;
+    const baselineY = Number(state.timelineHeight) / 2;
+    const centerX = left + width / 2;
+    const yStart = (top + height / 2) < baselineY ? top + height : top;
+    line.setAttribute('x1', centerX);
+    line.setAttribute('y1', yStart);
+    line.setAttribute('x2', valueToX(target.value));
+    line.setAttribute('y2', baselineY);
+}
+
 function attachDrag() {
     const items = elTimeline.querySelectorAll('.draggable');
     items.forEach(el => {
+        if (el.dataset.type === 'event') {
+            el.onpointermove = (event) => {
+                if (el.dataset.interactionActive === 'true') return;
+                const corner = eventResizeCorner(event, el);
+                el.style.cursor = corner ? resizeCursor(corner) : 'grab';
+            };
+            el.onpointerleave = () => {
+                if (el.dataset.interactionActive !== 'true') el.style.cursor = 'grab';
+            };
+        }
+
         el.onpointerdown = (ev) => {
             ev.preventDefault();
             const id = el.dataset.id;
             const type = el.dataset.type;
+            const corner = type === 'event' ? eventResizeCorner(ev, el) : null;
+            const isResizing = Boolean(corner);
             const startX = ev.clientX;
             const startY = ev.clientY;
             const rect = el.getBoundingClientRect();
@@ -1677,15 +1794,36 @@ function attachDrag() {
             const initialLeft = (rect.left - timelineRect.left) / timelineZoom;
             const initialTop = (rect.top - timelineRect.top) / timelineZoom;
             const width = rect.width / timelineZoom;
+            const height = rect.height / timelineZoom;
+            el.dataset.interactionActive = 'true';
+            el.style.cursor = isResizing ? resizeCursor(corner) : 'grabbing';
+            el.setPointerCapture?.(ev.pointerId);
 
             const onMove = (eMove) => {
                 const dx = (eMove.clientX - startX) / timelineZoom;
                 const dy = (eMove.clientY - startY) / timelineZoom;
-                if (type === 'period') {
+                if (isResizing) {
+                    const resizeFromLeft = corner.endsWith('left');
+                    const resizeFromTop = corner.startsWith('top');
+                    const desiredWidth = Math.min(480, Math.max(120, width + (resizeFromLeft ? -dx : dx)));
+                    const desiredHeight = Math.min(720, Math.max(72, height + (resizeFromTop ? -dy : dy)));
+                    const left = resizeFromLeft ? initialLeft + width - desiredWidth : initialLeft;
+
+                    el.style.width = `${desiredWidth}px`;
+                    el.style.height = `${desiredHeight}px`;
+                    const borderHeight = el.offsetHeight - el.clientHeight;
+                    const safeHeight = Math.max(desiredHeight, el.scrollHeight + borderHeight);
+                    const top = resizeFromTop ? initialTop + height - safeHeight : initialTop;
+                    el.style.left = `${left}px`;
+                    el.style.top = `${top}px`;
+                    el.style.height = `${safeHeight}px`;
+                    updateEventConnectorPreview(el, id);
+                } else if (type === 'period') {
                     el.style.top = `${initialTop + dy}px`;
                 } else {
                     el.style.left = `${initialLeft + dx}px`;
                     el.style.top = `${initialTop + dy}px`;
+                    updateEventConnectorPreview(el, id);
                 }
             };
 
@@ -1700,8 +1838,22 @@ function attachDrag() {
                     if (type === 'event') {
                         const baseX = valueToX(target.value);
                         const baseY = Number(state.timelineHeight) / 2 + Number(state.eventBaseOffset);
-                        target.offsetX = (initialLeft + dx + width / 2) - baseX;
-                        target.offsetY = (initialTop + dy) - baseY;
+                        if (isResizing) {
+                            const finalRect = el.getBoundingClientRect();
+                            const finalLeft = (finalRect.left - timelineRect.left) / timelineZoom;
+                            const finalTop = (finalRect.top - timelineRect.top) / timelineZoom;
+                            const finalWidth = finalRect.width / timelineZoom;
+                            const finalHeight = finalRect.height / timelineZoom;
+                            target.width = Math.round(finalWidth);
+                            target.height = Math.round(finalHeight);
+                            target.autoWidth = false;
+                            target.offsetX = (finalLeft + finalWidth / 2) - baseX;
+                            target.offsetY = finalTop - baseY;
+                            if (editingEventId === target.id) fillEventForm(target);
+                        } else {
+                            target.offsetX = (initialLeft + dx + width / 2) - baseX;
+                            target.offsetY = (initialTop + dy) - baseY;
+                        }
                     } else {
                         const baseY = Number(state.timelineHeight) / 2 + Number(state.periodBaseOffset);
                         target.offsetX = 0;
@@ -1710,12 +1862,17 @@ function attachDrag() {
                 }
                 document.removeEventListener('pointermove', onMove);
                 document.removeEventListener('pointerup', onUp);
+                document.removeEventListener('pointercancel', onUp);
+                el.releasePointerCapture?.(ev.pointerId);
+                delete el.dataset.interactionActive;
+                el.style.cursor = type === 'event' ? 'grab' : '';
                 if (didDrag) renderTimeline();
                 else startEditing(type, id);
             };
 
             document.addEventListener('pointermove', onMove);
             document.addEventListener('pointerup', onUp);
+            document.addEventListener('pointercancel', onUp);
         };
     });
 }
@@ -1823,13 +1980,13 @@ function renderTimeline({ coalesceHistory = false } = {}) {
     document.getElementById('period-list-empty').hidden = state.periods.length > 0;
     elTimeline.dataset.eventCount = String(state.events.length);
     elTimeline.dataset.periodCount = String(state.periods.length);
-    elTimeline.dataset.agentVersion = '1.2';
+    elTimeline.dataset.agentVersion = '1.3';
 
     trackHistory({ coalesce: coalesceHistory });
     persistDraft();
     window.dispatchEvent(new CustomEvent('timeline:statechange', {
         detail: {
-            version: '1.2',
+            version: '1.3',
             eventCount: state.events.length,
             periodCount: state.periods.length
         }
@@ -2130,7 +2287,7 @@ function getAgentDescriptor() {
     }
     return {
         name: 'Frise chronologique',
-        version: '1.2',
+        version: '1.3',
         language: 'fr',
         description: 'Éditeur visuel de frises chronologiques pilotable par données structurées.',
         preferredFlow: [
@@ -2149,6 +2306,7 @@ function getAgentDescriptor() {
             undo: 'Restores the previous timeline state.',
             redo: 'Restores the next timeline state.',
             setZoom: 'Sets the editor zoom between 0.5 and 2.',
+            setDateFormat: 'Sets date display to numeric or long French format.',
             getPrompt: 'Returns either the chatbot or autonomous-agent prompt for a topic.'
         },
         domFallback: {
@@ -2165,7 +2323,7 @@ function getAgentDescriptor() {
 }
 
 window.timelineAgent = Object.freeze({
-    version: '1.2',
+    version: '1.3',
     describe: () => getAgentDescriptor(),
     getState: () => JSON.parse(JSON.stringify(state)),
     importState: payload => applyTimelinePayload(payload, { adaptiveEventWidth: true }),
@@ -2198,6 +2356,7 @@ window.timelineAgent = Object.freeze({
         return window.timelineAgent.getState();
     },
     setZoom: value => setTimelineZoom(value),
+    setDateFormat: format => setDateFormat(format),
     getPrompt: (topic, options = {}) => buildAiPrompt(topic, options)
 });
 document.documentElement.dataset.timelineAgentApi = window.timelineAgent.version;
