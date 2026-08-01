@@ -14,7 +14,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Playfair+Display:wght@500&family=Roboto:wght@400;500&family=Poppins:wght@400;500&family=Montserrat:wght@500;600&family=Lora:wght@500&family=Manrope:wght@500;600&family=Open+Sans:wght@400;600&family=Lato:wght@400;700&family=Oswald:wght@500&display=swap"
     rel="stylesheet">
   <link rel="alternate" type="application/json" href="agent-manifest.json" title="Contrat pour agents IA">
-  <link rel="stylesheet" href="style.css?v=1.3.1">
+  <link rel="stylesheet" href="style.css?v=1.4">
 </head>
 
 <body data-mobile-view="canvas">
@@ -347,6 +347,24 @@
             spellcheck="true">Ma frise chronologique</h1>
         </div>
         <div class="canvas-header-actions">
+          <div class="panel-visibility-controls" role="group" aria-label="Affichage des panneaux latéraux">
+            <button class="button button-quiet button-square" id="toggle-editor-panel" type="button"
+              aria-label="Masquer le panneau de création" title="Masquer le panneau de création"
+              aria-pressed="false">
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <path d="M8 4v16" />
+              </svg>
+            </button>
+            <button class="button button-quiet button-square" id="toggle-elements-panel" type="button"
+              aria-label="Masquer le panneau d’organisation" title="Masquer le panneau d’organisation"
+              aria-pressed="false">
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <path d="M16 4v16" />
+              </svg>
+            </button>
+          </div>
           <div class="history-controls" role="group" aria-label="Historique des modifications">
             <button class="button button-quiet button-square" id="undo-action" type="button"
               aria-label="Annuler" title="Annuler (⌘Z)" disabled>
@@ -505,6 +523,9 @@
             </label>
             <label>Graduations secondaires
               <input data-setting="secondaryTickHeight" type="number" value="12" step="1" min="2">
+            </label>
+            <label>Épaisseur de la ligne de base
+              <input data-setting="baselineThickness" type="number" value="2" step="0.5" min="1" max="12">
             </label>
             <label>Distance des dates
               <input data-setting="labelOffset" type="number" value="6" step="1">
@@ -733,6 +754,7 @@
       "end": { "type": "number" },
       "mainStep": { "type": "number", "exclusiveMinimum": 0 },
       "dateFormat": { "type": "string", "enum": ["numeric", "long"] },
+      "baselineThickness": { "type": "number", "minimum": 1, "maximum": 12 },
       "events": {
         "type": "array",
         "items": {
@@ -789,7 +811,7 @@
     }
   }
   </script>
-  <script src="script.js?v=1.3.1"></script>
+  <script src="script.js?v=1.4"></script>
 </body>
 
 </html>
