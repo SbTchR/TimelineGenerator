@@ -1,4 +1,8 @@
 const pxPerMm = 96 / 25.4;
+const A4 = {
+    portrait: { w: 210, h: 297 },
+    landscape: { w: 297, h: 210 }
+};
 
 const state = {
     title: 'Ma frise chronologique',
@@ -1409,6 +1413,37 @@ function hexToRgba(hex, alpha) {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+function renderPageGuides() {
+    const guideLayer = document.createElement('div');
+    guideLayer.className = 'page-guide-layer';
+    guideLayer.setAttribute('aria-hidden', 'true');
+    const pageSize = A4[state.orientation];
+    const pageWidth = pageSize.w * pxPerMm;
+    const pageHeight = pageSize.h * pxPerMm;
+
+    for (let x = pageWidth; x < timelineWidth(); x += pageWidth) {
+        const line = document.createElement('div');
+        line.className = 'page-guide page-guide-vertical';
+        line.style.left = `${x}px`;
+        guideLayer.appendChild(line);
+    }
+
+    const centeredPageTop = state.timelineHeight / 2 - pageHeight / 2;
+    const firstPageIndex = Math.floor(-centeredPageTop / pageHeight);
+    for (let pageIndex = firstPageIndex; ; pageIndex += 1) {
+        const y = centeredPageTop + pageIndex * pageHeight;
+        if (y > state.timelineHeight) break;
+        if (y >= 0) {
+            const line = document.createElement('div');
+            line.className = 'page-guide page-guide-horizontal';
+            line.style.top = `${y}px`;
+            guideLayer.appendChild(line);
+        }
+    }
+
+    elTimeline.appendChild(guideLayer);
+}
+
 function renderAxis() {
     const baseY = Number(state.timelineHeight) / 2;
     const baselineThickness = Math.min(12, Math.max(1, toNumber(state.baselineThickness, 2)));
@@ -2007,6 +2042,7 @@ function renderTimeline({ coalesceHistory = false } = {}) {
     elTimeline.style.height = `${state.timelineHeight}px`;
     elTimeline.style.width = `${timelineWidth()}px`;
     elTimeline.style.zoom = String(timelineZoom);
+    renderPageGuides();
     renderAxis();
     renderPeriods();
     const lines = renderEvents();
@@ -2214,6 +2250,9 @@ document.getElementById('export-html').addEventListener('click', () => {
     const clone = elTimeline.cloneNode(true);
     clone.style.zoom = '1';
 
+    const pageGuides = clone.querySelector('.page-guide-layer');
+    if (pageGuides) pageGuides.remove();
+
     // Remove interactivity classes and attributes
     clone.querySelectorAll('.draggable').forEach(el => {
         el.classList.remove('draggable');
@@ -2244,6 +2283,7 @@ document.getElementById('export-html').addEventListener('click', () => {
             }).join('\n')}
     /* Overrides for static view */
     #timeline-space { margin: 0 auto; box-shadow: none; }
+    .page-guide-layer { display: none !important; }
   </style>
 </head>
 <body>

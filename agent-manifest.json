@@ -137,6 +137,7 @@
     "panels": ["editor", "elements"],
     "browserApiMethod": "setPanels",
     "gridBackground": false,
+    "a4PageGuides": true,
     "baselineThickness": "baselineThickness:1..12"
   },
   "stateChangeEvent": "timeline:statechange",

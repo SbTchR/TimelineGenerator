@@ -1146,6 +1146,38 @@ input[type="checkbox"] {
   padding: 0 12px;
 }
 
+.page-guide-layer {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.page-guide {
+  position: absolute;
+  border-color: rgba(66, 80, 112, 0.28);
+  border-style: dashed;
+}
+
+.page-guide-vertical {
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-width: 0 0 0 1px;
+}
+
+.page-guide-horizontal {
+  right: 0;
+  left: 0;
+  height: 0;
+  border-width: 1px 0 0;
+}
+
+.exporting .page-guide-layer {
+  display: none;
+}
+
 .connector-layer {
   position: absolute;
   z-index: 2;
