@@ -1,8 +1,4 @@
 const pxPerMm = 96 / 25.4;
-const A4 = {
-    portrait: { w: 210, h: 297 },
-    landscape: { w: 297, h: 210 }
-};
 
 const state = {
     title: 'Ma frise chronologique',
@@ -13,6 +9,7 @@ const state = {
     mmPerMain: 15,
     mainTickHeight: 20,
     secondaryTickHeight: 12,
+    baselineThickness: 2,
     backgroundColor: 'transparent',
     baselineColor: '#0f172a',
     mainTickColor: '#0f172a',
@@ -50,6 +47,7 @@ const undoStack = [];
 const redoStack = [];
 const HISTORY_LIMIT = 80;
 const ZOOM_STORAGE_KEY = 'timeline-generator:zoom:v1';
+const PANEL_STORAGE_KEY = 'timeline-generator:panels:v1';
 
 const elTimeline = document.getElementById('timeline-space');
 const elEventList = document.getElementById('event-list');
@@ -77,8 +75,11 @@ const elAiImportStatus = document.getElementById('ai-import-status');
 const elUndoAction = document.getElementById('undo-action');
 const elRedoAction = document.getElementById('redo-action');
 const elZoomValue = document.getElementById('zoom-reset');
+const elToggleEditorPanel = document.getElementById('toggle-editor-panel');
+const elToggleElementsPanel = document.getElementById('toggle-elements-panel');
 const DRAFT_STORAGE_KEY = 'timeline-generator:draft:v2';
 let listsVisible = true;
+let panelVisibility = { editor: true, elements: true };
 
 elTimelineScroll.style.height = '100%';
 
@@ -216,6 +217,65 @@ function updateZoomControls() {
     if (zoomIn) zoomIn.disabled = timelineZoom >= 2;
 }
 
+function updatePanelVisibilityControls() {
+    const editorHidden = !panelVisibility.editor;
+    const elementsHidden = !panelVisibility.elements;
+    document.body.classList.toggle('hide-editor-panel', editorHidden);
+    document.body.classList.toggle('hide-elements-panel', elementsHidden);
+
+    if (elToggleEditorPanel) {
+        const label = editorHidden ? 'Afficher le panneau de création' : 'Masquer le panneau de création';
+        elToggleEditorPanel.setAttribute('aria-pressed', String(editorHidden));
+        elToggleEditorPanel.setAttribute('aria-label', label);
+        elToggleEditorPanel.title = label;
+    }
+    if (elToggleElementsPanel) {
+        const label = elementsHidden ? 'Afficher le panneau d’organisation' : 'Masquer le panneau d’organisation';
+        elToggleElementsPanel.setAttribute('aria-pressed', String(elementsHidden));
+        elToggleElementsPanel.setAttribute('aria-label', label);
+        elToggleElementsPanel.title = label;
+    }
+}
+
+function persistPanelVisibility() {
+    try {
+        localStorage.setItem(PANEL_STORAGE_KEY, JSON.stringify(panelVisibility));
+    } catch (error) {
+        // The layout remains usable when browser storage is unavailable.
+    }
+}
+
+function restorePanelVisibility() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(PANEL_STORAGE_KEY) || 'null');
+        if (saved && typeof saved === 'object') {
+            panelVisibility = {
+                editor: saved.editor !== false,
+                elements: saved.elements !== false
+            };
+        }
+    } catch (error) {
+        panelVisibility = { editor: true, elements: true };
+    }
+    updatePanelVisibilityControls();
+}
+
+function setPanelVisibility(panel, visible, { announce = false } = {}) {
+    if (!['editor', 'elements'].includes(panel)) return { ...panelVisibility };
+    const centerX = (elTimelineScroll.scrollLeft + elTimelineScroll.clientWidth / 2) / timelineZoom;
+    panelVisibility[panel] = Boolean(visible);
+    updatePanelVisibilityControls();
+    persistPanelVisibility();
+    window.requestAnimationFrame(() => {
+        elTimelineScroll.scrollLeft = Math.max(0, centerX * timelineZoom - elTimelineScroll.clientWidth / 2);
+    });
+    if (announce) {
+        const panelName = panel === 'editor' ? 'Le panneau de création' : 'Le panneau d’organisation';
+        showToast(`${panelName} est ${visible ? 'affiché' : 'masqué'}.`);
+    }
+    return { ...panelVisibility };
+}
+
 function setTimelineZoom(value, { preserveCenter = true, announce = false } = {}) {
     const next = Math.min(2, Math.max(0.5, Math.round(value * 10) / 10));
     const previous = timelineZoom || 1;
@@ -308,6 +368,12 @@ document.getElementById('close-ai').addEventListener('click', () => toggleAiModa
 document.getElementById('close-ai-btn').addEventListener('click', () => toggleAiModal(false));
 elUndoAction?.addEventListener('click', undoTimeline);
 elRedoAction?.addEventListener('click', redoTimeline);
+elToggleEditorPanel?.addEventListener('click', () => {
+    setPanelVisibility('editor', !panelVisibility.editor, { announce: true });
+});
+elToggleElementsPanel?.addEventListener('click', () => {
+    setPanelVisibility('elements', !panelVisibility.elements, { announce: true });
+});
 document.getElementById('zoom-out')?.addEventListener('click', () => {
     setTimelineZoom(timelineZoom - 0.1, { announce: true });
 });
@@ -839,7 +905,7 @@ function normalizeTimelinePayload(payload, { adaptiveEventWidth = false } = {}) 
 
     const normalized = JSON.parse(JSON.stringify(defaultState));
     const safeConfigKeys = [
-        'secondaryPerMain', 'mmPerMain', 'mainTickHeight', 'secondaryTickHeight',
+        'secondaryPerMain', 'mmPerMain', 'mainTickHeight', 'secondaryTickHeight', 'baselineThickness',
         'backgroundColor', 'baselineColor', 'mainTickColor', 'secondaryTickColor',
         'labelColor', 'labelSize', 'labelOffset', 'labelFont', 'dateFormat', 'showSecondaryLabels',
         'secondaryLabelSize', 'secondaryLabelColor', 'secondaryLabelOffset',
@@ -849,6 +915,10 @@ function normalizeTimelinePayload(payload, { adaptiveEventWidth = false } = {}) 
     safeConfigKeys.forEach(key => {
         if (source[key] !== undefined) normalized[key] = source[key];
     });
+    normalized.baselineThickness = Math.min(
+        12,
+        Math.max(1, toNumber(source.baselineThickness, defaultState.baselineThickness))
+    );
 
     normalized.title = String(source.title || 'Ma frise chronologique').trim();
     normalized.start = startValue;
@@ -1339,54 +1409,13 @@ function hexToRgba(hex, alpha) {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function renderGuides() {
-    const guideLayer = document.createElement('div');
-    guideLayer.className = 'guide-layer';
-    const size = A4[state.orientation];
-    const pageW = size.w * pxPerMm;
-    const pageH = size.h * pxPerMm;
-
-    // Vertical guides (pages width)
-    for (let x = pageW; x < timelineWidth(); x += pageW) {
-        const line = document.createElement('div');
-        line.className = 'guide guide-vert';
-        line.style.left = `${x}px`;
-        guideLayer.appendChild(line);
-    }
-
-    // Horizontal guides (pages height) - Centered on baseline
-    // Baseline is at state.timelineHeight / 2
-    // We want a page center to align with baseline.
-    // So grid starts at (timelineHeight/2) - (pageH/2)
-    const centerY = state.timelineHeight / 2;
-    const gridOriginY = centerY - pageH / 2;
-
-    // Find first visible line
-    // lineY = gridOriginY + k * pageH
-    // We want lineY >= 0 (or slightly before)
-    // k * pageH >= -gridOriginY => k >= -gridOriginY / pageH
-    const startK = Math.floor(-gridOriginY / pageH);
-
-    for (let k = startK; ; k++) {
-        const y = gridOriginY + k * pageH;
-        if (y > state.timelineHeight) break;
-
-        if (y >= 0 && y <= state.timelineHeight) {
-            const line = document.createElement('div');
-            line.className = 'guide guide-horiz';
-            line.style.top = `${y}px`;
-            guideLayer.appendChild(line);
-        }
-    }
-
-    elTimeline.appendChild(guideLayer);
-}
-
 function renderAxis() {
     const baseY = Number(state.timelineHeight) / 2;
+    const baselineThickness = Math.min(12, Math.max(1, toNumber(state.baselineThickness, 2)));
     const axis = document.createElement('div');
     axis.className = 'baseline';
-    axis.style.top = `${baseY}px`;
+    axis.style.top = `${baseY - baselineThickness / 2}px`;
+    axis.style.height = `${baselineThickness}px`;
     axis.style.background = state.baselineColor;
     elTimeline.appendChild(axis);
 
@@ -1797,11 +1826,15 @@ function attachDrag() {
             const height = rect.height / timelineZoom;
             el.dataset.interactionActive = 'true';
             el.style.cursor = isResizing ? resizeCursor(corner) : 'grabbing';
+            el.style.willChange = isResizing ? 'left, top, width, height' : 'left, top';
             el.setPointerCapture?.(ev.pointerId);
 
-            const onMove = (eMove) => {
-                const dx = (eMove.clientX - startX) / timelineZoom;
-                const dy = (eMove.clientY - startY) / timelineZoom;
+            let pendingPoint = null;
+            let moveFrame = 0;
+
+            const applyInteractionAt = (clientX, clientY) => {
+                const dx = (clientX - startX) / timelineZoom;
+                const dy = (clientY - startY) / timelineZoom;
                 if (isResizing) {
                     const resizeFromLeft = corner.endsWith('left');
                     const resizeFromTop = corner.startsWith('top');
@@ -1827,7 +1860,23 @@ function attachDrag() {
                 }
             };
 
+            const onMove = (eMove) => {
+                pendingPoint = { x: eMove.clientX, y: eMove.clientY };
+                if (moveFrame) return;
+                moveFrame = requestAnimationFrame(() => {
+                    moveFrame = 0;
+                    if (!pendingPoint) return;
+                    const point = pendingPoint;
+                    pendingPoint = null;
+                    applyInteractionAt(point.x, point.y);
+                });
+            };
+
             const onUp = (eUp) => {
+                if (moveFrame) cancelAnimationFrame(moveFrame);
+                moveFrame = 0;
+                pendingPoint = null;
+                applyInteractionAt(eUp.clientX, eUp.clientY);
                 const dx = (eUp.clientX - startX) / timelineZoom;
                 const dy = (eUp.clientY - startY) / timelineZoom;
                 const didDrag = Math.hypot(eUp.clientX - startX, eUp.clientY - startY) > 4;
@@ -1865,6 +1914,7 @@ function attachDrag() {
                 document.removeEventListener('pointercancel', onUp);
                 el.releasePointerCapture?.(ev.pointerId);
                 delete el.dataset.interactionActive;
+                el.style.willChange = '';
                 el.style.cursor = type === 'event' ? 'grab' : '';
                 if (didDrag) renderTimeline();
                 else startEditing(type, id);
@@ -1957,7 +2007,6 @@ function renderTimeline({ coalesceHistory = false } = {}) {
     elTimeline.style.height = `${state.timelineHeight}px`;
     elTimeline.style.width = `${timelineWidth()}px`;
     elTimeline.style.zoom = String(timelineZoom);
-    renderGuides();
     renderAxis();
     renderPeriods();
     const lines = renderEvents();
@@ -1980,13 +2029,13 @@ function renderTimeline({ coalesceHistory = false } = {}) {
     document.getElementById('period-list-empty').hidden = state.periods.length > 0;
     elTimeline.dataset.eventCount = String(state.events.length);
     elTimeline.dataset.periodCount = String(state.periods.length);
-    elTimeline.dataset.agentVersion = '1.3';
+    elTimeline.dataset.agentVersion = '1.4';
 
     trackHistory({ coalesce: coalesceHistory });
     persistDraft();
     window.dispatchEvent(new CustomEvent('timeline:statechange', {
         detail: {
-            version: '1.3',
+            version: '1.4',
             eventCount: state.events.length,
             periodCount: state.periods.length
         }
@@ -2165,10 +2214,6 @@ document.getElementById('export-html').addEventListener('click', () => {
     const clone = elTimeline.cloneNode(true);
     clone.style.zoom = '1';
 
-    // Remove guide layer
-    const guides = clone.querySelector('.guide-layer');
-    if (guides) guides.remove();
-
     // Remove interactivity classes and attributes
     clone.querySelectorAll('.draggable').forEach(el => {
         el.classList.remove('draggable');
@@ -2199,7 +2244,6 @@ document.getElementById('export-html').addEventListener('click', () => {
             }).join('\n')}
     /* Overrides for static view */
     #timeline-space { margin: 0 auto; box-shadow: none; }
-    .guide-layer { display: none !important; }
   </style>
 </head>
 <body>
@@ -2287,7 +2331,7 @@ function getAgentDescriptor() {
     }
     return {
         name: 'Frise chronologique',
-        version: '1.3',
+        version: '1.4',
         language: 'fr',
         description: 'Éditeur visuel de frises chronologiques pilotable par données structurées.',
         preferredFlow: [
@@ -2307,6 +2351,7 @@ function getAgentDescriptor() {
             redo: 'Restores the next timeline state.',
             setZoom: 'Sets the editor zoom between 0.5 and 2.',
             setDateFormat: 'Sets date display to numeric or long French format.',
+            setPanels: 'Shows or hides the editor and organization panels.',
             getPrompt: 'Returns either the chatbot or autonomous-agent prompt for a topic.'
         },
         domFallback: {
@@ -2323,7 +2368,7 @@ function getAgentDescriptor() {
 }
 
 window.timelineAgent = Object.freeze({
-    version: '1.3',
+    version: '1.4',
     describe: () => getAgentDescriptor(),
     getState: () => JSON.parse(JSON.stringify(state)),
     importState: payload => applyTimelinePayload(payload, { adaptiveEventWidth: true }),
@@ -2357,12 +2402,22 @@ window.timelineAgent = Object.freeze({
     },
     setZoom: value => setTimelineZoom(value),
     setDateFormat: format => setDateFormat(format),
+    setPanels: options => {
+        if (typeof options?.editor === 'boolean') {
+            setPanelVisibility('editor', options.editor);
+        }
+        if (typeof options?.elements === 'boolean') {
+            setPanelVisibility('elements', options.elements);
+        }
+        return { ...panelVisibility };
+    },
     getPrompt: (topic, options = {}) => buildAiPrompt(topic, options)
 });
 document.documentElement.dataset.timelineAgentApi = window.timelineAgent.version;
 
 restoreDraft();
 restoreTimelineZoom();
+restorePanelVisibility();
 syncSettingsControls();
 updateAiPrompt();
 setEditorTab('event');

@@ -1,6 +1,6 @@
 {
   "name": "Frise chronologique",
-  "version": "1.3",
+  "version": "1.4",
   "language": "fr",
   "description": "Editeur visuel de frises chronologiques pilotable par donnees structurees.",
   "entrypoint": "index.html",
@@ -58,6 +58,10 @@
       "arguments": ["numeric|long"],
       "returns": "numeric|long"
     },
+    "setPanels": {
+      "arguments": ["{editor?:boolean,elements?:boolean}"],
+      "returns": "{editor:boolean,elements:boolean}"
+    },
     "getPrompt": {
       "arguments": [
         "topic:string",
@@ -94,7 +98,9 @@
     "redo": "#redo-action",
     "zoomOut": "#zoom-out",
     "zoomReset": "#zoom-reset",
-    "zoomIn": "#zoom-in"
+    "zoomIn": "#zoom-in",
+    "toggleEditorPanel": "#toggle-editor-panel",
+    "toggleElementsPanel": "#toggle-elements-panel"
   },
   "domInputs": {
     "aiTopic": "#ai-topic",
@@ -102,6 +108,7 @@
     "aiPeriodCount": "#ai-period-count",
     "aiImageMode": "#ai-image-mode",
     "dateFormat": "[data-setting='dateFormat']",
+    "baselineThickness": "[data-setting='baselineThickness']",
     "chatbotPromptMode": "[data-ai-prompt-mode='chatbot']",
     "agentPromptMode": "[data-ai-prompt-mode='agent']",
     "aiJson": "#ai-json-input"
@@ -125,6 +132,12 @@
     "visualHandle": false,
     "stateProperties": ["width", "height"],
     "cursor": ["nwse-resize", "nesw-resize"]
+  },
+  "workspaceLayout": {
+    "panels": ["editor", "elements"],
+    "browserApiMethod": "setPanels",
+    "gridBackground": false,
+    "baselineThickness": "baselineThickness:1..12"
   },
   "stateChangeEvent": "timeline:statechange",
   "schemaSelector": "#timeline-agent-schema"
