@@ -14,6 +14,8 @@ const state = {
     mainTickHeight: 20,
     secondaryTickHeight: 12,
     baselineThickness: 2,
+    baselineThicknessMm: 0.5,
+    baselinePositionPercent: 50,
     backgroundColor: 'transparent',
     baselineColor: '#0f172a',
     mainTickColor: '#0f172a',
@@ -485,6 +487,10 @@ document.querySelectorAll('[data-setting]').forEach(input => {
             state[key] = val;
         }
 
+        if (key === 'baselineThicknessMm' && Number.isFinite(val)) {
+            state.baselineThickness = val * pxPerMm;
+        }
+
         if (key === 'timelineHeight') {
             elTimelineScroll.style.height = '100%';
         }
@@ -910,6 +916,7 @@ function normalizeTimelinePayload(payload, { adaptiveEventWidth = false } = {}) 
     const normalized = JSON.parse(JSON.stringify(defaultState));
     const safeConfigKeys = [
         'secondaryPerMain', 'mmPerMain', 'mainTickHeight', 'secondaryTickHeight', 'baselineThickness',
+        'baselineThicknessMm', 'baselinePositionPercent',
         'backgroundColor', 'baselineColor', 'mainTickColor', 'secondaryTickColor',
         'labelColor', 'labelSize', 'labelOffset', 'labelFont', 'dateFormat', 'showSecondaryLabels',
         'secondaryLabelSize', 'secondaryLabelColor', 'secondaryLabelOffset',
@@ -919,9 +926,15 @@ function normalizeTimelinePayload(payload, { adaptiveEventWidth = false } = {}) 
     safeConfigKeys.forEach(key => {
         if (source[key] !== undefined) normalized[key] = source[key];
     });
-    normalized.baselineThickness = Math.min(
-        12,
-        Math.max(1, toNumber(source.baselineThickness, defaultState.baselineThickness))
+    const legacyThicknessPx = Math.max(1, toNumber(source.baselineThickness, defaultState.baselineThickness));
+    normalized.baselineThicknessMm = Math.min(
+        50,
+        Math.max(0.25, toNumber(source.baselineThicknessMm, legacyThicknessPx / pxPerMm))
+    );
+    normalized.baselineThickness = normalized.baselineThicknessMm * pxPerMm;
+    normalized.baselinePositionPercent = Math.min(
+        100,
+        Math.max(0, toNumber(source.baselinePositionPercent, defaultState.baselinePositionPercent))
     );
 
     normalized.title = String(source.title || 'Ma frise chronologique').trim();
@@ -966,7 +979,7 @@ function focusTimelineContent() {
     window.requestAnimationFrame(() => {
         elTimelineScroll.scrollTop = Math.max(
             0,
-            Number(state.timelineHeight) * timelineZoom / 2 - elTimelineScroll.clientHeight * 0.55
+            baselineMetrics().center * timelineZoom - elTimelineScroll.clientHeight * 0.55
         );
     });
 }
@@ -1021,6 +1034,8 @@ function buildAiPayloadExample(imageMode, periodCount) {
         start: 1914,
         end: 1919,
         mainStep: 1,
+        baselinePositionPercent: 50,
+        baselineThicknessMm: 0.5,
         events: [event],
         periods: periodCount === 0 ? [] : [period]
     }, null, 2);
@@ -1057,6 +1072,7 @@ RÈGLES DE CONTENU ET DE DATES
 
 RÈGLES DE MISE EN PAGE ET DE COULEURS
 - N’ajoute ni width, ni offsetX, ni offsetY : l’application adapte la largeur des cartes au contenu et répartit automatiquement les événements sur des rangées sans chevauchement.
+- baselinePositionPercent place la ligne verticalement dans le canevas : 0 en haut, 50 au centre et 100 en bas. baselineThicknessMm définit son épaisseur physique ; 30 mm correspondent à 3 cm et 40 mm à 4 cm.
 - Utilise au maximum quatre familles visuelles cohérentes. Pour une même catégorie, conserve le même couple fond/accent.
 - Couples conseillés pour les événements : #FFE7E2/#FF806F, #FFF0CF/#E6A93F, #E7EFFF/#6E91E8, #F0E7FF/#9B78DD. connectorColor est aussi la couleur du pourtour de la carte.
 - Pour les périodes : #DFF8F5/#43C4B8, #E6EFFF/#6E91E8 ou #F0E7FF/#9B78DD. Utilise #111C44 pour textColor.
@@ -1404,6 +1420,34 @@ function timelineWidth() {
     return state.padding * 2 + (span / state.mainStep) * pxPerMain;
 }
 
+function baselineMetrics(config = state) {
+    const canvasHeight = Math.max(1, toNumber(config.timelineHeight, defaultState.timelineHeight));
+    const legacyThicknessPx = Math.max(1, toNumber(config.baselineThickness, defaultState.baselineThickness));
+    const thicknessMm = Math.min(
+        50,
+        Math.max(0.25, toNumber(config.baselineThicknessMm, legacyThicknessPx / pxPerMm))
+    );
+    const thickness = Math.min(canvasHeight, thicknessMm * pxPerMm);
+    const positionPercent = Math.min(
+        100,
+        Math.max(0, toNumber(config.baselinePositionPercent, defaultState.baselinePositionPercent))
+    );
+    const desiredCenter = canvasHeight * positionPercent / 100;
+    const halfThickness = thickness / 2;
+    const center = Math.min(
+        canvasHeight - halfThickness,
+        Math.max(halfThickness, desiredCenter)
+    );
+    return {
+        center,
+        top: center - halfThickness,
+        bottom: center + halfThickness,
+        thickness,
+        thicknessMm,
+        positionPercent
+    };
+}
+
 function hexToRgba(hex, alpha) {
     const h = hex.replace('#', '');
     const bigint = parseInt(h, 16);
@@ -1445,12 +1489,11 @@ function renderPageGuides() {
 }
 
 function renderAxis() {
-    const baseY = Number(state.timelineHeight) / 2;
-    const baselineThickness = Math.min(12, Math.max(1, toNumber(state.baselineThickness, 2)));
+    const baseline = baselineMetrics();
     const axis = document.createElement('div');
     axis.className = 'baseline';
-    axis.style.top = `${baseY - baselineThickness / 2}px`;
-    axis.style.height = `${baselineThickness}px`;
+    axis.style.top = `${baseline.top}px`;
+    axis.style.height = `${baseline.thickness}px`;
     axis.style.background = state.baselineColor;
     elTimeline.appendChild(axis);
 
@@ -1460,7 +1503,7 @@ function renderAxis() {
         tick.className = 'tick main';
         tick.style.left = `${x}px`;
         tick.style.height = `${state.mainTickHeight}px`;
-        tick.style.top = `${baseY - state.mainTickHeight}px`;
+        tick.style.top = `${baseline.top - state.mainTickHeight}px`;
         tick.style.background = state.mainTickColor;
         elTimeline.appendChild(tick);
 
@@ -1472,14 +1515,14 @@ function renderAxis() {
                 sTick.className = 'tick secondary';
                 sTick.style.left = `${xv}px`;
                 sTick.style.height = `${state.secondaryTickHeight}px`;
-                sTick.style.top = `${baseY - state.secondaryTickHeight}px`;
+                sTick.style.top = `${baseline.top - state.secondaryTickHeight}px`;
                 sTick.style.background = state.secondaryTickColor;
                 elTimeline.appendChild(sTick);
 
                 if (state.showSecondaryLabels) {
                     const sLbl = document.createElement('div');
                     sLbl.className = 'tick-label secondary';
-                    sLbl.style.top = `${baseY + state.secondaryLabelOffset}px`;
+                    sLbl.style.top = `${baseline.bottom + state.secondaryLabelOffset}px`;
                     sLbl.style.color = state.secondaryLabelColor;
                     sLbl.style.fontSize = `${state.secondaryLabelSize}px`;
                     sLbl.style.fontFamily = state.secondaryLabelFont || state.labelFont;
@@ -1495,7 +1538,7 @@ function renderAxis() {
 
         const lbl = document.createElement('div');
         lbl.className = 'tick-label';
-        lbl.style.top = `${baseY + state.labelOffset}px`;
+        lbl.style.top = `${baseline.bottom + state.labelOffset}px`;
         lbl.style.color = state.labelColor;
         lbl.style.fontSize = `${state.labelSize}px`;
         lbl.style.fontFamily = state.labelFont;
@@ -1508,7 +1551,8 @@ function renderAxis() {
 }
 
 function renderEvents() {
-    const baseY = Number(state.timelineHeight) / 2 + Number(state.eventBaseOffset);
+    const baseline = baselineMetrics();
+    const baseY = baseline.bottom + Number(state.eventBaseOffset);
     const lines = [];
     state.events.forEach(evt => {
         if (evt.visible === false) return;
@@ -1570,14 +1614,15 @@ function renderEvents() {
         card.style.left = `${centerX - card.offsetWidth / 2}px`;
         card.style.top = `${topY}px`;
 
-        const baselineY = Number(state.timelineHeight) / 2;
-        const yStart = (topY + card.offsetHeight / 2) < baselineY ? (topY + card.offsetHeight) : topY;
+        const cardCenterY = topY + card.offsetHeight / 2;
+        const connectorY = cardCenterY < baseline.center ? baseline.top : baseline.bottom;
+        const yStart = cardCenterY < baseline.center ? (topY + card.offsetHeight) : topY;
         lines.push({
             id: evt.id,
             x1: centerX,
             y1: yStart,
             x2: valueToX(evt.value),
-            y2: baselineY,
+            y2: connectorY,
             color: evt.connectorColor || '#0f172a'
         });
     });
@@ -1675,7 +1720,7 @@ function positionPeriodCallout(callout, periodX, periodWidth) {
 }
 
 function renderPeriods() {
-    const baseY = Number(state.timelineHeight) / 2 + Number(state.periodBaseOffset);
+    const baseY = baselineMetrics().top + Number(state.periodBaseOffset);
     state.periods.forEach(per => {
         if (per.visible === false) return;
         const wrap = document.createElement('div');
@@ -1822,13 +1867,15 @@ function updateEventConnectorPreview(card, id) {
     const top = (cardRect.top - timelineRect.top) / timelineZoom;
     const width = cardRect.width / timelineZoom;
     const height = cardRect.height / timelineZoom;
-    const baselineY = Number(state.timelineHeight) / 2;
+    const baseline = baselineMetrics();
     const centerX = left + width / 2;
-    const yStart = (top + height / 2) < baselineY ? top + height : top;
+    const cardCenterY = top + height / 2;
+    const connectorY = cardCenterY < baseline.center ? baseline.top : baseline.bottom;
+    const yStart = cardCenterY < baseline.center ? top + height : top;
     line.setAttribute('x1', centerX);
     line.setAttribute('y1', yStart);
     line.setAttribute('x2', valueToX(target.value));
-    line.setAttribute('y2', baselineY);
+    line.setAttribute('y2', connectorY);
 }
 
 function attachDrag() {
@@ -1921,7 +1968,7 @@ function attachDrag() {
                 if (target && didDrag) {
                     if (type === 'event') {
                         const baseX = valueToX(target.value);
-                        const baseY = Number(state.timelineHeight) / 2 + Number(state.eventBaseOffset);
+                        const baseY = baselineMetrics().bottom + Number(state.eventBaseOffset);
                         if (isResizing) {
                             const finalRect = el.getBoundingClientRect();
                             const finalLeft = (finalRect.left - timelineRect.left) / timelineZoom;
@@ -1939,7 +1986,7 @@ function attachDrag() {
                             target.offsetY = (initialTop + dy) - baseY;
                         }
                     } else {
-                        const baseY = Number(state.timelineHeight) / 2 + Number(state.periodBaseOffset);
+                        const baseY = baselineMetrics().top + Number(state.periodBaseOffset);
                         target.offsetX = 0;
                         target.offsetY = (initialTop + dy) - baseY;
                     }
@@ -2065,13 +2112,13 @@ function renderTimeline({ coalesceHistory = false } = {}) {
     document.getElementById('period-list-empty').hidden = state.periods.length > 0;
     elTimeline.dataset.eventCount = String(state.events.length);
     elTimeline.dataset.periodCount = String(state.periods.length);
-    elTimeline.dataset.agentVersion = '1.4';
+    elTimeline.dataset.agentVersion = '1.5';
 
     trackHistory({ coalesce: coalesceHistory });
     persistDraft();
     window.dispatchEvent(new CustomEvent('timeline:statechange', {
         detail: {
-            version: '1.4',
+            version: '1.5',
             eventCount: state.events.length,
             periodCount: state.periods.length
         }
@@ -2166,10 +2213,7 @@ document.getElementById('export-pdf').addEventListener('click', async () => {
         } else {
             let first = true;
 
-            // Tiling logic centered on baseline
-            // Canvas baseline is at canvas.height / 2
-            // We want a page center to align with canvas baseline.
-            // gridOriginY = (canvas.height / 2) - (pageHeightPx / 2)
+            // Align PDF tiling with the A4 page guides shown in the editor.
             const centerY = canvas.height / 2;
             const gridOriginY = centerY - pageHeightPx / 2;
 
@@ -2371,7 +2415,7 @@ function getAgentDescriptor() {
     }
     return {
         name: 'Frise chronologique',
-        version: '1.4',
+        version: '1.5',
         language: 'fr',
         description: 'Éditeur visuel de frises chronologiques pilotable par données structurées.',
         preferredFlow: [
@@ -2392,6 +2436,7 @@ function getAgentDescriptor() {
             setZoom: 'Sets the editor zoom between 0.5 and 2.',
             setDateFormat: 'Sets date display to numeric or long French format.',
             setPanels: 'Shows or hides the editor and organization panels.',
+            setBaseline: 'Sets baseline vertical position and thickness in millimeters.',
             getPrompt: 'Returns either the chatbot or autonomous-agent prompt for a topic.'
         },
         domFallback: {
@@ -2408,7 +2453,7 @@ function getAgentDescriptor() {
 }
 
 window.timelineAgent = Object.freeze({
-    version: '1.4',
+    version: '1.5',
     describe: () => getAgentDescriptor(),
     getState: () => JSON.parse(JSON.stringify(state)),
     importState: payload => applyTimelinePayload(payload, { adaptiveEventWidth: true }),
@@ -2450,6 +2495,22 @@ window.timelineAgent = Object.freeze({
             setPanelVisibility('elements', options.elements);
         }
         return { ...panelVisibility };
+    },
+    setBaseline: (options = {}) => {
+        if (Number.isFinite(Number(options.positionPercent))) {
+            state.baselinePositionPercent = Math.min(100, Math.max(0, Number(options.positionPercent)));
+        }
+        if (Number.isFinite(Number(options.thicknessMm))) {
+            state.baselineThicknessMm = Math.min(50, Math.max(0.25, Number(options.thicknessMm)));
+            state.baselineThickness = state.baselineThicknessMm * pxPerMm;
+        }
+        syncSettingsControls();
+        renderTimeline();
+        const baseline = baselineMetrics();
+        return {
+            positionPercent: baseline.positionPercent,
+            thicknessMm: baseline.thicknessMm
+        };
     },
     getPrompt: (topic, options = {}) => buildAiPrompt(topic, options)
 });

@@ -1,6 +1,6 @@
 {
   "name": "Frise chronologique",
-  "version": "1.4",
+  "version": "1.5",
   "language": "fr",
   "description": "Editeur visuel de frises chronologiques pilotable par donnees structurees.",
   "entrypoint": "index.html",
@@ -62,6 +62,10 @@
       "arguments": ["{editor?:boolean,elements?:boolean}"],
       "returns": "{editor:boolean,elements:boolean}"
     },
+    "setBaseline": {
+      "arguments": ["{positionPercent?:number,thicknessMm?:number}"],
+      "returns": "{positionPercent:number,thicknessMm:number}"
+    },
     "getPrompt": {
       "arguments": [
         "topic:string",
@@ -108,7 +112,8 @@
     "aiPeriodCount": "#ai-period-count",
     "aiImageMode": "#ai-image-mode",
     "dateFormat": "[data-setting='dateFormat']",
-    "baselineThickness": "[data-setting='baselineThickness']",
+    "baselineThicknessMm": "[data-setting='baselineThicknessMm']",
+    "baselinePositionPercent": "[data-setting='baselinePositionPercent']",
     "chatbotPromptMode": "[data-ai-prompt-mode='chatbot']",
     "agentPromptMode": "[data-ai-prompt-mode='agent']",
     "aiJson": "#ai-json-input"
@@ -138,7 +143,8 @@
     "browserApiMethod": "setPanels",
     "gridBackground": false,
     "a4PageGuides": true,
-    "baselineThickness": "baselineThickness:1..12"
+    "baselinePosition": "baselinePositionPercent:0..100",
+    "baselineThickness": "baselineThicknessMm:0.25..50"
   },
   "stateChangeEvent": "timeline:statechange",
   "schemaSelector": "#timeline-agent-schema"
